@@ -10,6 +10,12 @@ Aplikasi Android (Kotlin + WebView) untuk **analisis website yang diizinkan**, i
 Scaffold **M1–M5 + M7 partial + Worker stub**. Detail: [docs/STATUS.md](docs/STATUS.md)  
 Master plan: [docs/MASTER-PLAN-V2.txt](docs/MASTER-PLAN-V2.txt)
 
+## Tampilan APK
+
+UI utama = WebView memuat `app/src/main/assets/ambrus/` (HTML/CSS/JS).
+Logo utama: `logo.png` + icon launcher `@mipmap/ic_launcher`.
+Tanpa native bridge di browser → mode **DEMO**; di APK → badge **LIVE**.
+
 ## Fitur yang sudah ada di kode
 
 - Validasi URL HTTPS + pencegahan SSRF dasar

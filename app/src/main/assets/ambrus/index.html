@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<title>Ambrus — Web Copier &amp; Analyzer</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.brand img.logo-img{width:34px;height:34px;border-radius:10px;object-fit:cover;display:block;background:#0b1020}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <img class="logo-img" src="logo.png" alt="Ambrus" width="34" height="34">
+    <div><b>Ambrus</b><small id="subtitle">Web Copier &amp; Analyzer</small></div>
+  </div>
+  <div class="top-actions">
+    <span id="modeBadge" class="badge">DEMO</span>
+    <button id="btnProject" class="chip">Proyek: –</button>
+  </div>
+</header>
+
+<main id="view" aria-live="polite"></main>
+
+<nav class="bottomnav" id="nav">
+  <a href="#/home" data-r="home"><i>⌂</i>Beranda</a>
+  <a href="#/analyze/resources" data-r="analyze"><i>◎</i>Analisis</a>
+  <a href="#/editor" data-r="editor"><i>✎</i>Editor</a>
+  <a href="#/projects" data-r="projects"><i>▤</i>Proyek</a>
+  <a href="#/more" data-r="more"><i>☰</i>Lainnya</a>
+</nav>
+
+<div id="toast" class="toast" role="status"></div>
+<script src="app.js"></script>
+</body>
+</html>

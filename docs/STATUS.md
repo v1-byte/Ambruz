@@ -41,3 +41,10 @@
 ```bash
 cd worker && npm i && npx wrangler deploy
 ```
+
+## UI shell (2026-10-13)
+
+- Tampilan utama APK = WebView `assets/ambrus/` (index.html + style.css + app.js)
+- Logo utama: `assets/ambrus/logo.png` + `@mipmap/ic_launcher`
+- Bridge native: `window.Android` (startScan, stopScan, openUrl, saveZip)
+- Tanpa bridge di browser biasa → mode DEMO
