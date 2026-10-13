@@ -1,0 +1,19 @@
+name: Android CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+jobs:
+  # Full assemble needs Android SDK; placeholder documents intent.
+  note:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Structure check
+        run: |
+          test -f app/build.gradle.kts
+          test -f app/src/main/AndroidManifest.xml
+          test -f worker/worker.mjs
+          test -f docs/MASTER-PLAN-V2.txt
+          echo "Scaffold structure OK"

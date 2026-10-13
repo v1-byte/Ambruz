@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ambruz_primary">#1A1A2E</color>
+    <color name="ambruz_primary_container">#16213E</color>
+    <color name="ambruz_accent">#0F3460</color>
+    <color name="ambruz_highlight">#E94560</color>
+    <color name="ambruz_surface">#F7F7F8</color>
+    <color name="ambruz_on_surface">#111111</color>
+</resources>

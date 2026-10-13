@@ -1,0 +1,12 @@
+name = "ambruz-api"
+main = "worker.mjs"
+compatibility_date = "2026-10-13"
+
+[vars]
+ALLOWED_ORIGIN = "https://example.com"
+
+# Uncomment when D1 is created:
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "ambruz"
+# database_id = "YOUR_D1_ID"

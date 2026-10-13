@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Ambruz</string>
+    <string name="app_subtitle">Web Copier &amp; Analyzer</string>
+    <string name="menu_new_scan">New Website Scan</string>
+    <string name="menu_browser">Website Browser</string>
+    <string name="menu_projects">Saved Projects</string>
+    <string name="menu_history">Scan History</string>
+    <string name="menu_settings">Settings</string>
+    <string name="hint_url">https://example.com</string>
+    <string name="btn_scan">Mulai Scan</string>
+    <string name="access_level_a">Level A — Public Inspection</string>
+    <string name="access_level_b">Level B — Authorized Project</string>
+    <string name="access_level_c">Level C — Owner Rebuild</string>
+    <string name="disclaimer">Hanya analisis website milik Anda atau yang Anda miliki izinnya. Ambruz tidak mendukung pengambilan aset tanpa otorisasi.</string>
+    <string name="export_zip">Ekspor ZIP</string>
+    <string name="status_idle">Siap</string>
+</resources>

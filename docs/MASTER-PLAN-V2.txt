@@ -1,0 +1,510 @@
+WEB COPIER & ANALYZER ANDROID
+MASTER PROJECT PLAN — VERSI 2.0
+Status: Perencanaan lengkap Platform: Android APK Repository: Ambrus .Teknologi APK: Kotlin + Android WebView Format proyek: Folder proyek + ZIP Backend target: Cloudflare Workers + D1 Hosting target: Cloudflare Pages atau server yang dikelola pengguna Referensi awal: https://rtzz1g8.com/#/activity
+
+BAGIAN I — VISI UTAMA
+1. Tujuan akhir
+Membangun satu aplikasi Android yang berfungsi sebagai pusat analisis website dan pengelolaan proyek web.
+Pengguna memasukkan URL, aplikasi melakukan pemeriksaan sesuai akses yang tersedia, menyusun peta struktur website, mencatat endpoint dan dependensi, menyimpan resource yang diizinkan, serta menghasilkan proyek yang dapat diedit dan diekspor.
+Untuk website milik sendiri atau yang mendapatkan izin, sistem juga menyediakan alur untuk mengganti konfigurasi backend lama dengan API baru, menguji integrasi, dan melakukan hosting ulang.
+Sasaran akhirnya adalah menghasilkan proyek website yang dapat dikelola secara mandiri, bukan sekadar tangkapan layar atau daftar URL.
+2. Definisi Full Access
+Istilah Full Access dalam proyek ini berarti fitur analisis selengkap mungkin terhadap aset, konfigurasi, source code, endpoint, dan server yang memang dapat diakses secara sah oleh pengguna.
+Ada tiga tingkat akses:
+Level A — Public Inspection
+Tanpa kredensial khusus.
+Dapat memeriksa resource publik, halaman yang dapat dimuat, URL yang terlihat, metadata respons yang tersedia, dan informasi DNS publik tertentu.
+Tidak menjamin source code asli, endpoint internal, atau seluruh konfigurasi server dapat diperoleh.
+Level B — Authorized Project Access
+Dengan izin pemilik dan akses yang sesuai.
+Dapat memproses source code, konfigurasi deployment, spesifikasi API, aset privat yang diizinkan, log server yang disediakan, dan konfigurasi database yang boleh digunakan.
+Level ini merupakan pilihan terbaik jika tujuannya membuat salinan proyek yang lengkap dan dapat dipelihara.
+Level C — Owner-Controlled Rebuild
+Untuk sistem yang dimiliki pengguna.
+Dapat mencakup pemindahan domain, migrasi API, penggantian database, perubahan frontend, pengujian autentikasi, serta deployment ke infrastruktur baru.
+Catatan: tidak ada tool yang bisa menjamin seluruh backend dan logika game pihak ketiga dapat diperoleh hanya dengan memasukkan URL. Komponen yang tidak tersedia harus diperoleh dari pemilik atau dibangun ulang secara terpisah.
+
+BAGIAN II — MODUL APLIKASI
+3. Dashboard utama
+Menu utama:
+New Website Scan.
+Website Browser.
+Resource Analyzer.
+Domain Analyzer.
+Server Analyzer.
+API Analyzer.
+Game Resource Analyzer.
+Dependency Map.
+API Migration.
+Website Editor.
+Saved Projects.
+ZIP Export.
+Deployment Manager.
+Scan History.
+Settings.
+Setiap proyek mempunyai ID, URL sumber, waktu pemindaian, tingkat akses, status pengambilan resource, dan status ekspor.
+4. URL Scanner
+Fungsi:
+Menerima URL HTTPS.
+Memvalidasi format URL.
+Mengikuti pengalihan yang diperbolehkan.
+Mencatat URL awal dan URL akhir.
+Mengidentifikasi domain, subdomain, port, dan path.
+Memeriksa status pemuatan.
+Mencatat halaman yang gagal dibuka.
+Mendukung beberapa halaman dalam satu proyek.
+Menghindari URL duplikat.
+Menghentikan pemindaian sesuai batas waktu atau jumlah resource.
+Pengguna dapat memilih satu halaman atau daftar halaman dari website yang diizinkan.
+Untuk aplikasi SPA, sistem harus memperhatikan bahwa URL seperti #/activity merupakan fragmen sisi browser. Fragmen tersebut tidak dikirim sebagai bagian dari HTTP request biasa sehingga rute aplikasi mungkin perlu dianalisis melalui navigasi browser atau source code yang tersedia.
+5. Website Structure Analyzer
+Menganalisis struktur halaman dan resource yang ditemukan.
+Kategori:
+HTML.
+CSS.
+JavaScript.
+JSON.
+XML.
+Gambar.
+Ikon.
+Font.
+Video dan audio yang dapat diakses.
+Manifest web.
+Service worker.
+Peta sumber kode jika tersedia secara sah.
+File konfigurasi publik.
+Link internal.
+Link eksternal.
+Form dan navigasi.
+Referensi resource lain.
+Hasil setiap resource memuat:
+URL.
+Jenis konten.
+Ukuran jika diketahui.
+Status pengambilan.
+Waktu pemeriksaan.
+Lokasi penyimpanan lokal.
+Hash file untuk mendeteksi duplikasi.
+Keterangan apabila resource gagal diambil.
+Aplikasi membedakan source code yang tersedia dari hasil DOM yang telah dirender. DOM hasil render bukan pengganti source code backend.
+6. Domain Analyzer
+Tujuan: memetakan domain yang berkaitan dengan website yang sedang dianalisis.
+Informasi yang direncanakan:
+Domain utama.
+Subdomain yang diketahui.
+Hostname dari resource yang terlihat.
+Domain tujuan redirect.
+Hostname API.
+Hostname aset statis.
+Hostname CDN.
+Catatan DNS publik yang tersedia.
+Informasi TLS sertifikat yang dapat diperoleh.
+Status resolusi domain.
+Hubungan domain dengan halaman atau resource.
+Contoh hasil:
+Hostname
+Kategori
+Sumber penemuan
+example.com
+Website
+URL awal
+static.example.com
+Asset host
+URL resource
+api.example.com
+API candidate
+Permintaan yang diamati
+Nama di atas hanya contoh.
+Sistem tidak boleh menyimpulkan bahwa sebuah hostname pasti milik website hanya karena muncul di halaman. Setiap hubungan harus dicatat berdasarkan sumber penemuannya.
+Penemuan subdomain hanya dilakukan melalui sumber yang sah atau inventaris yang diberikan pemilik. Tidak ada jaminan semua subdomain dapat ditemukan.
+7. Server Analyzer
+Tujuan: menyusun informasi teknis tentang server yang dapat diamati atau yang telah mendapat akses administratif resmi.
+Informasi publik yang mungkin tersedia:
+Status HTTP.
+Header respons yang tidak sensitif.
+Redirect.
+Jenis konten.
+Informasi cache.
+Metadata TLS.
+Alamat IP hasil resolusi DNS jika relevan.
+Informasi CDN atau reverse proxy jika dapat dipastikan.
+Waktu respons.
+Error koneksi.
+Status layanan publik.
+Informasi yang memerlukan akses pemilik:
+Konfigurasi server aplikasi.
+Daftar service yang berjalan.
+Log server.
+Konfigurasi reverse proxy.
+Konfigurasi environment.
+Database dan skema.
+Konfigurasi deployment.
+Rahasia server.
+Informasi yang tidak tersedia secara publik tidak boleh ditampilkan seolah-olah telah ditemukan. Banner server atau header tertentu juga tidak cukup untuk memastikan teknologi backend secara pasti.
+8. API Analyzer
+Modul untuk mencatat dan memahami hubungan antara frontend dan API.
+Metadata endpoint
+URL endpoint.
+Hostname.
+Path.
+Metode HTTP.
+Jenis konten.
+Status respons jika terlihat.
+Waktu pengamatan.
+Halaman pemicu.
+Apakah endpoint berhasil diamati.
+Apakah skema API diketahui.
+Apakah endpoint milik pengguna atau pihak ketiga.
+Klasifikasi endpoint
+Public API.
+Authentication API.
+User/Profile API.
+Content API.
+Configuration API.
+Upload API.
+Download API.
+Game API.
+Payment API.
+Analytics API.
+WebSocket endpoint.
+Unknown API.
+Klasifikasi merupakan perkiraan berdasarkan bukti dan harus dapat dikoreksi pengguna.
+Pemeriksaan skema
+Jika tersedia melalui dokumentasi resmi atau source code:
+OpenAPI.
+Swagger.
+GraphQL schema yang diizinkan.
+Model request dan response.
+Validasi field.
+Kode kesalahan.
+Versi API.
+Dokumentasi autentikasi.
+Aplikasi tidak boleh menganggap endpoint yang tidak teramati sebagai endpoint yang tidak ada.
+9. Network & Dependency Analyzer
+Membangun peta hubungan antara halaman, resource, domain, dan API.
+Contoh:
+Halaman → JavaScript → API → Respons JSON → Komponen UI
+Fitur:
+Pencatatan permintaan jaringan yang tersedia.
+Hubungan antara resource dan halaman.
+Pengelompokan berdasarkan domain.
+Pencatatan status dan jenis respons.
+Deteksi dependensi yang gagal dimuat.
+Ringkasan resource yang diblokir.
+Laporan dependensi eksternal.
+Identifikasi kemungkinan konfigurasi endpoint di source code yang tersedia.
+Analisis harus mengikuti batas akses platform. Trafik yang dienkripsi, berada di luar WebView, atau tidak tersedia kepada aplikasi tidak otomatis dapat diamati.
+Data sensitif seperti token sesi, cookie autentikasi, password, dan informasi pribadi harus disamarkan.
+
+BAGIAN III — GAME ANALYZER
+10. Game Resource Analyzer
+Modul ini ditujukan untuk game web milik pengguna atau yang telah mendapat izin untuk dianalisis.
+Kategori yang dapat dicatat:
+Nama game dan URL halaman.
+Resource gambar dan animasi.
+Audio.
+Font.
+File JavaScript dan konfigurasi yang tersedia.
+Metadata loading.
+Endpoint game yang terlihat.
+WebSocket yang teramati.
+Jenis konten respons.
+Versi resource jika diketahui.
+Dependensi eksternal.
+Status resource.
+Ukuran file jika tersedia.
+Kategori API game
+Game configuration.
+Player profile.
+Session management.
+Game state.
+Leaderboard.
+Inventory.
+Progress.
+Content delivery.
+Telemetry.
+Wallet atau pembayaran jika relevan dengan sistem milik sendiri.
+Kategori tersebut adalah klasifikasi untuk inventarisasi, bukan klaim bahwa endpoint tersebut pasti ada pada website referensi.
+Informasi game yang memerlukan source code atau akses pemilik
+Aturan gameplay.
+Logika server.
+Skema database.
+Konfigurasi internal.
+Sistem matchmaking.
+Validasi hasil.
+Random number generation (RNG).
+Integrasi vendor.
+Mekanisme penyimpanan state.
+File frontend saja tidak dapat membuktikan bagaimana logika server bekerja. Pada game yang menggunakan server otoritatif, hasil gameplay tidak bisa direkonstruksi hanya dari aset yang diunduh.
+Modul ini tidak dimaksudkan untuk mengambil alih akun, mencuri kredensial, melewati DRM atau autentikasi, atau mengubah hasil permainan pada layanan pihak ketiga.
+11. APK dan game download inventory
+Jika pemilik menyediakan tautan APK atau file game yang boleh digunakan, sistem dapat mencatat:
+Nama aplikasi.
+URL sumber.
+Versi.
+Ukuran file.
+Hash file.
+Status unduhan.
+Informasi paket jika tersedia dari APK yang sah.
+Lisensi atau catatan izin.
+Hubungan dengan proyek website.
+Aplikasi tidak boleh menganggap link download yang ditemukan sebagai izin untuk mendistribusikan ulang file tersebut.
+
+BAGIAN IV — WEBSITE REBUILD
+12. Website Reconstruction Engine
+Tujuan: menyusun ulang frontend dari file yang tersedia dan diizinkan.
+Tahapan:
+Menginventarisasi halaman.
+Menginventarisasi resource.
+Menyusun struktur direktori.
+Mengidentifikasi dependensi.
+Mengganti referensi aset yang sesuai.
+Menyesuaikan routing.
+Menyesuaikan konfigurasi frontend.
+Menyiapkan pengujian.
+Membuat laporan komponen yang belum lengkap.
+Sistem harus membedakan tiga hasil:
+Resource copy: file berhasil disimpan.
+Frontend rebuild: halaman berhasil disusun ulang.
+Full application migration: frontend dan backend berhasil dihubungkan serta diuji.
+Ketiganya tidak sama.
+Website yang membutuhkan autentikasi, API eksternal, atau layanan backend mungkin tidak dapat berjalan penuh setelah ekspor sampai dependensinya diganti atau diintegrasikan dengan benar.
+13. Website Editor
+Fitur:
+Mengganti logo.
+Mengganti gambar.
+Mengubah warna dan tema.
+Mengubah teks.
+Mengubah tautan navigasi.
+Mengatur nama website.
+Mengatur favicon.
+Mengubah konfigurasi API.
+Meninjau perubahan.
+Menyimpan versi sebelum dan sesudah edit.
+Membandingkan perubahan.
+Membatalkan perubahan yang belum disimpan.
+Editor harus menghindari perubahan otomatis pada file yang tidak dipahami dan menyediakan backup sebelum modifikasi.
+14. Domain dan branding baru
+Setelah website dibangun ulang, pengguna dapat menentukan:
+Nama proyek.
+Domain baru.
+Subdomain API baru.
+Base URL frontend.
+Base URL backend.
+Pengaturan routing.
+Konfigurasi asset host.
+Redirect yang dibutuhkan.
+Environment development dan production.
+Pemindahan domain dan DNS memerlukan kendali atas domain tujuan. Aplikasi tidak dapat memindahkan domain pihak lain hanya dengan menyalin website.
+
+BAGIAN V — API MIGRATION
+15. Custom API: lama ke baru
+Jawaban teknis: bisa, untuk sistem milik sendiri atau yang memiliki izin dan dokumentasi yang sesuai.
+Rencana migrasi:
+Tahap A — Inventarisasi
+Mencatat endpoint lama yang diketahui, metode, skema, jenis autentikasi, serta komponen frontend yang memanggilnya.
+Tahap B — Pemetaan kontrak
+Membuat tabel pemetaan:
+API lama
+API baru
+Status
+/api/user
+/api/v1/users/me
+Direncanakan
+/api/config
+/api/v1/config
+Direncanakan
+/api/content
+/api/v1/content
+Direncanakan
+Contoh path di atas bersifat ilustratif dan bukan endpoint yang ditemukan pada URL referensi.
+Tahap C — Adapter layer
+Membuat lapisan adapter untuk menerjemahkan request dan response frontend ke format API baru.
+Tujuannya mengurangi kebutuhan mengubah setiap halaman secara terpisah.
+Tahap D — Database baru
+Menyusun skema database yang sesuai dengan kebutuhan aplikasi baru.
+Data hanya dipindahkan apabila pemilik memiliki hak dan akses untuk melakukannya. Skema dan data backend lama tidak dapat disimpulkan secara lengkap dari URL frontend saja.
+Tahap E — Authentication
+Menyusun autentikasi baru, pengelolaan sesi, otorisasi, dan pembatasan akses.
+Token API lama tidak boleh disalin atau digunakan ulang tanpa otorisasi yang sah.
+Tahap F — Pengujian kompatibilitas
+Menguji:
+Request dan response.
+Validasi data.
+Error handling.
+Login dan logout.
+Session expiration.
+Akses database.
+Hak akses pengguna.
+CORS.
+Rate limiting.
+Perilaku frontend ketika API gagal.
+Tahap G — Cutover
+Setelah pengujian berhasil, konfigurasi frontend diarahkan ke API baru.
+Jika pemilik mengendalikan domain lama, proxy atau redirect dapat disiapkan sesuai kebutuhan. Jika domain lama bukan milik pengguna, aplikasi tidak dapat mengubah rute di server aslinya.
+16. Mode integrasi API
+Aplikasi menyediakan tiga mode:
+Mode 1 — Direct New API
+Frontend langsung menggunakan API baru.
+Mode 2 — Adapter
+Frontend menggunakan kontrak kompatibilitas yang diterjemahkan ke API baru.
+Mode 3 — Mock API
+API simulasi untuk menguji UI ketika backend belum tersedia.
+Mock API tidak boleh disajikan sebagai layanan produksi yang benar-benar menyimpan atau memproses data asli.
+
+BAGIAN VI — BACKEND BARU
+17. Arsitektur backend
+Target:
+Cloudflare Workers.
+Cloudflare D1.
+Cloudflare Pages.
+GitHub.
+GitHub Actions.
+Rancangan alur:
+Android APK → Project Storage → ZIP Export
+dan untuk website hasil rebuild:
+Frontend → New API → Database
+APK tidak harus mengirim seluruh data website ke backend. Untuk tahap awal, analisis dan ekspor dapat berjalan lokal sehingga biaya infrastruktur lebih terkendali.
+18. Rencana endpoint backend
+Endpoint berikut adalah usulan untuk aplikasi milik sendiri:
+GET /api/health
+GET /api/projects
+POST /api/projects
+GET /api/projects/{id}
+PUT /api/projects/{id}
+DELETE /api/projects/{id}
+POST /api/projects/{id}/exports
+GET /api/projects/{id}/exports/{exportId}
+Setiap endpoint memerlukan validasi, autentikasi jika relevan, pembatasan ukuran, penanganan error, dan pemeriksaan kepemilikan proyek.
+
+BAGIAN VII — FORMAT ZIP
+19. Struktur arsip proyek
+Contoh target:
+web-project.zip
+project.json
+README.md
+manifest.json
+report/
+analysis.json
+resources.json
+domains.json
+servers.json
+endpoints.json
+dependencies.json
+limitations.json
+website/
+index.html
+assets/
+pages/
+config/
+backend/
+README.md
+api-spec.json
+src/
+migrations/
+tests/
+deployment/
+README.md
+deployment-config.example
+checksums/
+SHA256SUMS.txt
+File hanya dimasukkan jika tersedia, berhasil dihasilkan, atau memang dibuat oleh aplikasi.
+Folder backend/src/ dan migrations/ dapat belum tersedia jika backend baru belum dikembangkan. Konfigurasi rahasia produksi tidak boleh dimasukkan ke arsip.
+20. Manifest dan laporan
+Manifest mencatat:
+ID proyek.
+URL awal.
+URL akhir.
+Tanggal analisis.
+Versi tool.
+Daftar file.
+Jenis resource.
+Status pengambilan.
+Ukuran.
+Hash.
+Dependensi yang diketahui.
+Keterbatasan analisis.
+Laporan endpoint mencatat metadata yang diperlukan tanpa menyimpan kredensial atau data sensitif secara tidak perlu.
+Laporan domain mencatat hostname dan sumber bukti penemuan.
+Laporan server membedakan fakta yang diamati dari dugaan.
+
+BAGIAN VIII — KEAMANAN DAN RELIABILITAS
+21. Pengamanan URL
+Karena aplikasi memproses URL yang dimasukkan pengguna, implementasi harus mencegah:
+Pemanggilan localhost atau alamat internal yang tidak diizinkan.
+Akses ke layanan metadata cloud.
+Pengalihan ke alamat yang dilarang.
+Permintaan berulang tanpa batas.
+Unduhan file berukuran berlebihan.
+Penyimpanan file berbahaya dengan nama path yang tidak aman.
+ZIP Slip saat ekstraksi.
+Kebocoran kredensial ke laporan.
+Jika kelak backend yang melakukan pengambilan URL, validasi harus dilakukan di server dan setiap redirect harus diperiksa kembali. Pemeriksaan di antarmuka APK saja tidak cukup.
+22. WebView
+Persyaratan:
+JavaScript diaktifkan hanya ketika diperlukan.
+HTTPS menjadi default.
+Navigasi eksternal dikendalikan.
+Akses file lokal dibatasi.
+Bridge JavaScript-native tidak mengekspos fungsi berbahaya.
+Data sesi dipisahkan dari proyek ekspor.
+Error ditampilkan secara jelas.
+23. Keandalan ekspor
+Periksa ruang penyimpanan.
+Hindari nama file yang bertabrakan.
+Batasi ukuran proyek.
+Catat file gagal.
+Verifikasi ZIP setelah dibuat.
+Gunakan hash untuk integritas file.
+Jangan menandai ekspor berhasil sebelum arsip selesai ditulis.
+
+BAGIAN IX — ROADMAP PENGERJAAN
+24. Urutan milestone
+M1 — Fondasi APK Repository, proyek Kotlin, WebView, validasi URL, dan build APK.
+M2 — Dashboard UI, browser, status pemuatan, navigasi, dan riwayat.
+M3 — Resource Analyzer HTML/DOM, CSS, JavaScript, gambar, font, dan tautan.
+M4 — Domain & Server Analyzer Pemetaan hostname, redirect, DNS publik yang tersedia, TLS, dan metadata respons.
+M5 — API & Dependency Analyzer Inventaris endpoint yang teramati, klasifikasi, hubungan resource, dan laporan JSON.
+M6 — Resource Collector Pengambilan resource yang diizinkan, penyimpanan lokal, dan laporan kegagalan.
+M7 — ZIP Export Manifest, laporan, struktur proyek, arsip, dan pengujian ekstraksi.
+M8 — Website Editor Modifikasi tampilan, aset, routing, dan konfigurasi proyek.
+M9 — API Migration Pemetaan API lama ke API baru, adapter, mock API, dan pengujian kontrak.
+M10 — Backend Cloudflare Worker, D1, autentikasi, endpoint, dan pengujian.
+M11 — Hosting Deploy frontend, konfigurasi domain milik pengguna, dan integrasi backend.
+M12 — Game Analyzer Analisis resource game, metadata jaringan, dan dependensi game yang diizinkan.
+M13 — Final Testing Pengujian perangkat, ekspor, hosting, API, keamanan, serta dokumentasi.
+Urutan ini dapat disesuaikan berdasarkan hasil pengujian, tetapi milestone yang sudah lulus tidak diulang tanpa alasan teknis.
+
+BAGIAN X — KRITERIA SUKSES
+25. Definisi hasil akhir
+Proyek dinyatakan berhasil apabila:
+APK dapat dipasang dan dibuka.
+Pengguna dapat memasukkan URL yang valid.
+Resource yang tersedia dapat diinventarisasi.
+Domain dan endpoint yang teramati dapat dilaporkan.
+Resource yang diizinkan dapat disimpan.
+Hasil dapat diekspor menjadi ZIP valid.
+Proyek hasil ekspor dapat dibuka dan diedit.
+API baru dapat dibuat untuk sistem milik pengguna.
+Frontend dapat diarahkan ke API baru.
+Website hasil rebuild dapat diuji di hosting tujuan.
+Keterbatasan dan file yang tidak tersedia tercatat.
+Tidak ada klaim palsu bahwa backend privat berhasil disalin.
+26. Status awal
+[x] Konsep APK ditetapkan.
+[x] Analisis website ditentukan.
+[x] Domain dan server analyzer direncanakan.
+[x] API dan dependency analyzer direncanakan.
+[x] Game resource analyzer direncanakan.
+[x] API migration direncanakan.
+[x] ZIP export direncanakan.
+[x] Backend baru direncanakan.
+[x] Hosting ulang direncanakan.
+[ ] Repository dibuat.
+[ ] Milestone 1 diuji.
+[ ] Analyzer diimplementasikan.
+[ ] ZIP export diimplementasikan.
+[ ] API baru diuji.
+[ ] Website rebuild diuji.
+Status keseluruhan: MASTER PLAN V2.0 — PERENCANAAN.
+Prinsip utama: satu APK, satu alur proyek, satu sistem laporan, ekspor ZIP yang terverifikasi, dan migrasi API yang dilakukan secara eksplisit. Semua modul dikembangkan bertahap dan hasilnya diuji sebelum dilanjutkan.

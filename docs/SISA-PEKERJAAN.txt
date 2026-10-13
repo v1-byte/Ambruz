@@ -1,0 +1,30 @@
+================================================================================
+SISA PEKERJAAN AMBRUZ
+================================================================================
+
+SELESAI (scaffold di repo)
+- Struktur Gradle Android Kotlin
+- UrlGuard, UrlScanner, ScanPipeline
+- Analyzer: resource, domain, server, api, dependency, game
+- ProjectRepository, ZipExporter
+- UI: Main, Browser, ProjectDetail, Settings
+- Worker stub + wrangler.toml
+- Master plan + STATUS.md
+
+BERIKUTNYA (urut milestone)
+[ ] M1 verifikasi: buka di Android Studio, build APK debug
+[ ] M6 Resource Collector: unduh resource diizinkan ke storage app
+[ ] M7 lengkapi: servers.json, dependencies.json, website/ dari file tersimpan
+[ ] M8 Website Editor (logo, teks, tema, base URL API)
+[ ] M9 API migration mapping UI + mock adapter
+[ ] M10 D1 schema + auth + CRUD projects nyata
+[ ] M11 Pages deploy guide / Actions
+[ ] M12 perluas game analyzer hanya untuk proyek berizin
+[ ] M13 uji perangkat + dokumentasi pengguna
+
+P0: Build & install APK debug
+P1: M6 collector + UI laporan lebih kaya
+P2: Worker D1
+P3: Editor + migration
+
+================================================================================
