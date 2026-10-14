@@ -51,13 +51,15 @@ class MainActivity : AppCompatActivity() {
             web.addJavascriptInterface(AmbrusBridge(this, lifecycleScope), "Android")
             SessionBus.listener = { payload: JSONObject ->
                 try {
-                    if (isFinishing) return@listener
-                    runOnUiThread {
-                        try {
-                            if (!::web.isInitialized) return@runOnUiThread
-                            val arg = JSONObject.quote(payload.toString())
-                            evaluateJs("try{window.Ambrus&&window.Ambrus.emit&&window.Ambrus.emit($arg)}catch(e){}")
-                        } catch (_: Exception) { }
+                    if (!isFinishing) {
+                        runOnUiThread {
+                            try {
+                                if (::web.isInitialized) {
+                                    val arg = JSONObject.quote(payload.toString())
+                                    evaluateJs("try{window.Ambrus&&window.Ambrus.emit&&window.Ambrus.emit($arg)}catch(e){}")
+                                }
+                            } catch (_: Exception) { }
+                        }
                     }
                 } catch (_: Exception) { }
             }
