@@ -1,19 +1,16 @@
 name: Android CI
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
 jobs:
-  # Full assemble needs Android SDK; placeholder documents intent.
-  note:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Structure check
-        run: |
-          test -f app/build.gradle.kts
-          test -f app/src/main/AndroidManifest.xml
-          test -f worker/worker.mjs
-          test -f docs/MASTER-PLAN-V2.txt
-          echo "Scaffold structure OK"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager "platforms;android-35" "build-tools;34.0.0"
+      - run: chmod +x gradlew && ./gradlew assembleDebug --stacktrace
