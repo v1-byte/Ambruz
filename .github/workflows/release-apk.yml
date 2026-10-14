@@ -21,27 +21,21 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-
-      - name: Install SDK packages
-        run: |
-          sdkmanager "platforms;android-35" "build-tools;34.0.0" "platform-tools"
+        with:
+          packages: platform-tools platforms;android-35 build-tools;34.0.0
 
       - name: Grant execute
         run: chmod +x gradlew
 
       - name: Build debug APK
         run: ./gradlew assembleDebug --stacktrace
-        env:
-          ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
-      - name: Find APK
-        id: apk
+      - name: Package APK
         run: |
           APK=$(find app/build/outputs/apk -name "*.apk" | head -1)
-          echo "path=$APK" >> $GITHUB_OUTPUT
-          ls -la app/build/outputs/apk/debug/ || true
+          echo "APK=$APK"
+          ls -la "$APK"
           cp "$APK" Ambrus-debug.apk
-          echo "Built: $APK"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -57,9 +51,11 @@ jobs:
           files: Ambrus-debug.apk
           name: Ambrus ${{ github.ref_name }}
           body: |
-            APK debug build Ambrus Web Copier & Analyzer.
-            Install: izinkan sumber tidak dikenal, buka file APK.
-            Fitur: splash logo, Preview & Rekam, scan, ekspor ZIP.
+            ## Ambrus APK (debug)
+            - Splash logo + UI WebView
+            - Preview & Rekam sebelum copy
+            - Scan, analisis, ekspor ZIP
+            Install: Settings → izinkan install dari sumber tidak dikenal → buka APK.
           generate_release_notes: true
 
       - name: Update latest release (on main)
@@ -72,4 +68,4 @@ jobs:
           files: Ambrus-debug.apk
           body: |
             Build otomatis dari commit `${{ github.sha }}`.
-            APK debug — untuk uji instal langsung (bukan Play Store release signed).
+            APK **debug** untuk uji instal langsung (belum signed Play Store).
