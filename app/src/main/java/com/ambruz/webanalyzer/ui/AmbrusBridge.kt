@@ -18,21 +18,24 @@ import org.json.JSONObject
 import java.io.File
 import java.util.zip.ZipInputStream
 
-/**
- * Bridge UI ↔ native
- * startPreview / startScan / stopScan / openUrl / saveZip / listZips / loadZip
- */
 class AmbrusBridge(
     private val activity: MainActivity,
     private val scope: CoroutineScope
 ) {
     private val pipeline = ScanPipeline()
-    @Volatile private var activeId: String? = null
+    @Volatile
+    private var activeId: String? = null
 
     private fun zipDir(): File {
         val base = activity.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
             ?: activity.filesDir
         return File(base, "Ambrus").also { it.mkdirs() }
+    }
+
+    private fun emit(payload: JSONObject) {
+        val arg = JSONObject.quote(payload.toString())
+        val js = "window.Ambrus && window.Ambrus.emit && window.Ambrus.emit($arg)"
+        activity.runOnUiThread { activity.evaluateJs(js) }
     }
 
     @JavascriptInterface
@@ -67,50 +70,26 @@ class AmbrusBridge(
                     else -> AccessLevel.A_PUBLIC
                 }
                 activeId = projectId
-                emit(JSONObject().put("type", "progress").put("value", 5).put("message", "Loading… memindai URL"))
-
+                emit(JSONObject().put("type", "progress").put("value", 5).put("message", "Loading... memindai URL"))
                 val project = withContext(Dispatchers.IO) { pipeline.run(url, level) }
                 if (activeId != projectId) return@launch
-
                 (activity.application as AmbruzApp).projects.save(
                     project.copy(id = if (projectId.isNotBlank()) projectId else project.id)
                 )
-
-                emit(
-                    JSONObject().put("type", "server")
-                        .put("host", try { java.net.URI(project.finalUrl ?: url).host } catch (_: Exception) { "" })
-                        .put("status", 200)
-                        .put("headers", JSONObject().put("content-type", "text/html"))
-                )
-
+                val host = try { java.net.URI(project.finalUrl ?: url).host ?: "" } catch (_: Exception) { "" }
+                emit(JSONObject().put("type", "server").put("host", host).put("status", 200).put("headers", JSONObject().put("content-type", "text/html")))
                 project.resources.forEachIndexed { i, r ->
                     if (activeId != projectId) return@launch
-                    emit(
-                        JSONObject().put("type", "resource").put("url", r.url)
-                            .put("mime", r.contentType ?: "")
-                            .put("size", r.sizeBytes ?: JSONObject.NULL)
-                            .put("status", if (r.error == null) "ok" else "error")
-                            .put("error", r.error ?: "")
-                            .put("page", project.finalUrl ?: url)
-                            .put("path", r.url.substringAfterLast('/').ifBlank { "file" })
-                    )
+                    emit(JSONObject().put("type", "resource").put("url", r.url).put("mime", r.contentType ?: "").put("size", r.sizeBytes ?: JSONObject.NULL).put("status", if (r.error == null) "ok" else "error").put("error", r.error ?: "").put("page", project.finalUrl ?: url).put("path", r.url.substringAfterLast("/").ifBlank { "file" }))
                     if (i % 3 == 0) {
                         val pct = ((i + 1) * 80 / project.resources.size.coerceAtLeast(1)).coerceIn(5, 90)
-                        emit(JSONObject().put("type", "progress").put("value", pct).put("message", "Loading resource ${i + 1}…"))
+                        emit(JSONObject().put("type", "progress").put("value", pct).put("message", "Loading resource ${i + 1}..."))
                     }
                 }
-
                 project.endpoints.forEach { e ->
-                    emit(
-                        JSONObject().put("type", "request").put("url", e.url)
-                            .put("method", e.method)
-                            .put("status", e.statusCode ?: JSONObject.NULL)
-                            .put("mime", e.contentType ?: "")
-                            .put("page", e.triggerPage ?: url)
-                    )
+                    emit(JSONObject().put("type", "request").put("url", e.url).put("method", e.method).put("status", e.statusCode ?: JSONObject.NULL).put("mime", e.contentType ?: "").put("page", e.triggerPage ?: url))
                 }
-
-                emit(JSONObject().put("type", "progress").put("value", 100).put("message", "Selesai — Download full ZIP"))
+                emit(JSONObject().put("type", "progress").put("value", 100).put("message", "Selesai - Download full ZIP"))
                 emit(JSONObject().put("type", "done"))
             } catch (e: Exception) {
                 emit(JSONObject().put("type", "error").put("message", e.message ?: "Scan gagal"))
@@ -135,7 +114,6 @@ class AmbrusBridge(
         }
     }
 
-    /** Simpan ZIP base64 ke Documents/Ambrus/ di storage app (internal-accessible). */
     @JavascriptInterface
     fun saveZip(base64: String, fileName: String) {
         scope.launch(Dispatchers.IO) {
@@ -144,21 +122,12 @@ class AmbrusBridge(
                 val safe = fileName.replace(Regex("[^A-Za-z0-9._-]"), "_").ifBlank { "ambrus-export.zip" }
                 val out = File(zipDir(), safe)
                 out.writeBytes(bytes)
-                emit(
-                    JSONObject()
-                        .put("type", "zip_saved")
-                        .put("path", out.absolutePath)
-                        .put("fileName", out.name)
-                        .put("size", out.length())
-                )
+                emit(JSONObject().put("type", "zip_saved").put("path", out.absolutePath).put("fileName", out.name).put("size", out.length()))
                 withContext(Dispatchers.Main) {
                     Toast.makeText(activity, "ZIP disimpan:\n${out.absolutePath}", Toast.LENGTH_LONG).show()
                 }
             } catch (e: Exception) {
                 emit(JSONObject().put("type", "error").put("message", "Gagal simpan ZIP: ${e.message}"))
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(activity, "Gagal ZIP: ${e.message}", Toast.LENGTH_LONG).show()
-                }
             }
         }
     }
@@ -167,19 +136,9 @@ class AmbrusBridge(
     fun listZips() {
         scope.launch(Dispatchers.IO) {
             try {
-                val dir = zipDir()
-                val files = dir.listFiles()?.filter { it.isFile && it.name.endsWith(".zip", true) }
-                    ?.sortedByDescending { it.lastModified() }
-                    ?: emptyList()
+                val files = zipDir().listFiles()?.filter { it.isFile && it.name.endsWith(".zip", true) }?.sortedByDescending { it.lastModified() } ?: emptyList()
                 val arr = JSONArray()
-                files.forEach { f ->
-                    arr.put(
-                        JSONObject()
-                            .put("name", f.name)
-                            .put("path", f.absolutePath)
-                            .put("size", f.length())
-                    )
-                }
+                files.forEach { f -> arr.put(JSONObject().put("name", f.name).put("path", f.absolutePath).put("size", f.length())) }
                 emit(JSONObject().put("type", "zip_list").put("files", arr))
             } catch (e: Exception) {
                 emit(JSONObject().put("type", "error").put("message", e.message ?: "listZips gagal"))
@@ -187,9 +146,6 @@ class AmbrusBridge(
         }
     }
 
-    /**
-     * Load ZIP dari path internal: ekstrak project.json + website/*.html ke state JS.
-     */
     @JavascriptInterface
     fun loadZip(path: String) {
         scope.launch(Dispatchers.IO) {
@@ -208,14 +164,9 @@ class AmbrusBridge(
                         if (!entry.isDirectory && !name.contains("..")) {
                             val data = zis.readBytes()
                             when {
-                                name == "project.json" || name.endsWith("/project.json") ->
-                                    projectJson = data.toString(Charsets.UTF_8)
-                                name.startsWith("website/") && (
-                                    name.endsWith(".html") || name.endsWith(".htm") ||
-                                        name.endsWith(".css") || name.endsWith(".js")
-                                    ) -> {
-                                    val rel = name.removePrefix("website/")
-                                    htmlFiles[rel] = data.toString(Charsets.UTF_8)
+                                name == "project.json" || name.endsWith("/project.json") -> projectJson = data.toString(Charsets.UTF_8)
+                                name.startsWith("website/") && (name.endsWith(".html") || name.endsWith(".htm") || name.endsWith(".css") || name.endsWith(".js")) -> {
+                                    htmlFiles[name.removePrefix("website/")] = data.toString(Charsets.UTF_8)
                                 }
                             }
                         }
@@ -223,56 +174,31 @@ class AmbrusBridge(
                         entry = zis.nextEntry
                     }
                 }
-
-                val project = if (projectJson != null) {
-                    try {
-                        JSONObject(projectJson!!)
-                    } catch (_: Exception) {
-                        JSONObject()
-                    }
-                } else JSONObject()
-
-                if (!project.has("id")) {
-                    project.put("id", "zip_" + System.currentTimeMillis().toString(36))
-                }
+                val project = try { if (projectJson != null) JSONObject(projectJson!!) else JSONObject() } catch (_: Exception) { JSONObject() }
+                if (!project.has("id")) project.put("id", "zip_" + System.currentTimeMillis().toString(36))
                 if (!project.has("url")) project.put("url", "file://" + file.name)
                 project.put("status", "selesai")
                 project.put("demo", false)
                 project.put("exportStatus", "loaded")
                 project.put("zipPath", file.absolutePath)
-
-                // Simpan HTML utama ke edits untuk editor
-                val indexHtml = htmlFiles["index.html"]
-                    ?: htmlFiles.entries.firstOrNull { it.key.endsWith(".html") }?.value
+                val indexHtml = htmlFiles["index.html"] ?: htmlFiles.entries.firstOrNull { it.key.endsWith(".html") }?.value
                 if (indexHtml != null) {
                     val edits = project.optJSONObject("edits") ?: JSONObject()
-                    edits.put("htmlDraft", indexHtml.take(200_000))
+                    edits.put("htmlDraft", indexHtml.take(200000))
                     project.put("edits", edits)
                 }
                 if (htmlFiles.isNotEmpty()) {
                     val filesObj = JSONObject()
-                    htmlFiles.forEach { (k, v) -> filesObj.put(k, v.take(100_000)) }
+                    htmlFiles.forEach { (k, v) -> filesObj.put(k, v.take(100000)) }
                     project.put("websiteFiles", filesObj)
                 }
-
-                emit(
-                    JSONObject()
-                        .put("type", "zip_loaded")
-                        .put("project", project.toString())
-                        .put("path", file.absolutePath)
-                )
+                emit(JSONObject().put("type", "zip_loaded").put("project", project.toString()).put("path", file.absolutePath))
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(activity, "ZIP dimuat — buka Editor", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(activity, "ZIP dimuat - buka Editor", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
                 emit(JSONObject().put("type", "error").put("message", "Load ZIP gagal: ${e.message}"))
             }
         }
-    }
-
-    private fun emit(payload: JSONObject) {
-        val arg = JSONObject.quote(payload.toString())
-        val js = "window.Ambrus && window.Ambrus.emit && window.Ambrus.emit($arg)"
-        activity.runOnUiThread { activity.evaluateJs(js) }
     }
 }
