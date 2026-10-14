@@ -84,17 +84,17 @@ Backend privat tidak disalin hanya dari URL publik.
     data class ExportResult(val file: File, val failures: List<String>)
 
     companion object {
-        private const val BACKEND_README = """
+        private val BACKEND_README = """
 # Backend folder
 Tempat spesifikasi API baru dan source Worker/D1.
 Kosongkan secret produksi dari arsip ini.
 """.trimIndent()
-        private const val DEPLOY_README = """
+        private val DEPLOY_README = """
 # Deployment
 Gunakan Cloudflare Pages / Workers milik Anda.
 Lihat deployment-config.example.
 """.trimIndent()
-        private const val DEPLOY_EXAMPLE = """
+        private val DEPLOY_EXAMPLE = """
 # contoh — jangan commit secret
 FRONTEND_URL=https://app.example.com
 API_URL=https://api.example.com
