@@ -23,7 +23,7 @@
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const bridge = window.Android || null;
   const KEY = 'ambrus.v2';
-  const TOOL_VERSION = '2.1.0-ui';
+  const TOOL_VERSION = '2.2.0-ui';
 
   /* ---------- state ---------- */
   let S = load();
@@ -147,7 +147,7 @@
       case 'dns': p.dns.push({ host: ev.host, records: ev.records || [] }); break;
       case 'progress': progress = ev.value || 0; if (ev.message) pushLog(ev.message); break;
       case 'error': scanning = false; p.status = 'gagal'; pushLog('✗ ' + ev.message); toast(ev.message); break;
-      case 'done': scanning = false; progress = 100; p.status = 'selesai'; pushLog('✔ pemindaian selesai'); toast('Selesai — siap Download ZIP'); break;
+      case 'done': scanning = false; progress = 100; p.status = 'selesai'; pushLog('✔ selesai'); toast('Selesai'); if (p.recordMode === 'download') { setTimeout(() => { location.hash = '#/home'; render(); setTimeout(autoSaveZip, 400); }, 300); } break;
       case 'zip_saved': toast('ZIP disimpan: ' + (ev.path || ev.fileName || '')); pushLog('💾 ' + (ev.path || ev.fileName)); if ($('#zipList')) $('#zipList').innerHTML = '<span class="tag ok">Tersimpan</span> ' + esc(ev.path || ev.fileName || ''); break;
       case 'zip_list': {
         const files = ev.files || [];
@@ -167,14 +167,34 @@
         } catch (e) { toast('Gagal parse ZIP: ' + e.message); }
         break; }
     }
-    save(); softRender();
+    try { save(); if (scanning) { const m=$('#loadMsg'); const b=document.querySelector('.bar>i'); if(m) m.textContent=log[log.length-1]||''; if(b) b.style.width=progress+'%'; const meta=document.querySelector('.load-card .meta'); if(meta) meta.textContent=progress+'%'; } else softRender(); } catch (e) { try { pushLog('ui:'+e.message); } catch(_){} }
   }
   function guessPath(u) { try { const x = new URL(u); return 'assets/' + (x.hostname === new URL(cur().url).hostname ? '' : x.hostname + '/') + (x.pathname.replace(/^\//, '') || 'index'); } catch (e) { return 'assets/file'; } }
   function addDomain(p, host, src) { const d = p.domains[host] || (p.domains[host] = { host, sources: [], count: 0 }); d.count++; if (!d.sources.includes(src) && d.sources.length < 6) d.sources.push(src); }
   function pushLog(m) { log.push(new Date().toLocaleTimeString('id-ID') + ' ' + m); if (log.length > 300) log.shift(); }
   window.Ambrus = { emit };
+  window.onerror = function(m){ try{ pushLog('JS:'+m); }catch(e){} return true; };
 
   /* ---------- scan control ---------- */
+  function autoSaveZip() {
+    const p = cur(); if (!p) return toast('Belum ada proyek');
+    // trigger existing export then native save
+    try {
+      const xGo = document.getElementById('xGo');
+      if (location.hash !== '#/export') {
+        // build zip in-memory via doExport path: temporarily call export logic
+        location.hash = '#/export';
+        setTimeout(() => {
+          const b = document.getElementById('xGo');
+          if (b) b.click();
+          else toast('Buka menu Ekspor lalu unduh');
+        }, 250);
+      } else {
+        const b = document.getElementById('xGo');
+        if (b) b.click();
+      }
+    } catch (e) { toast(e.message || 'Gagal ekspor'); }
+  }
   function startScan(url, level, authorized, mode) {
     const v = validateUrl(url); if (!v.ok) return toast(v.msg);
     if (!authorized) return toast('Centang pernyataan izin terlebih dahulu');
@@ -183,15 +203,23 @@
     S.projects.unshift(p); S.currentId = p.id; save(); log = []; progress = 0; scanning = true;
     pushLog('▶ mulai: ' + p.url + ' (Level ' + level + ', mode ' + p.recordMode + ')');
     if (v.url.hash) pushLog('ℹ fragmen ' + v.url.hash + ' adalah rute sisi-browser; gunakan Preview & Rekam untuk menavigasi SPA.');
+    // download/scan: native fetch only (no second Activity) — more stable
     if (mode === 'preview' && bridge && bridge.startPreview) {
-      pushLog('● Preview + rekam: buka situs, navigasi seperti merekam, lalu ketuk Selesai & Copy');
-      bridge.startPreview(JSON.stringify({ projectId: p.id, url: p.url, level, authorized }));
-      location.hash = '#/browser'; render();
+      pushLog('● Preview + rekam');
+      try {
+        bridge.startPreview(JSON.stringify({ projectId: p.id, url: p.url, level, authorized }));
+      } catch (e) { toast('Preview gagal: ' + e.message); scanning = false; }
+      location.hash = '#/home'; render();
       return;
     }
-    if (bridge) { bridge.startScan(JSON.stringify({ projectId: p.id, url: p.url, level, authorized, maxResources: S.settings.maxResources, timeout: S.settings.timeout })); }
-    else demoScan(p);
-    location.hash = '#/browser'; render();
+    try {
+      if (bridge) {
+        bridge.startScan(JSON.stringify({ projectId: p.id, url: p.url, level, authorized, maxResources: S.settings.maxResources || 200, timeout: S.settings.timeout || 30 }));
+      } else demoScan(p);
+    } catch (e) {
+      scanning = false; p.status = 'gagal'; toast('Scan gagal: ' + (e.message || e));
+    }
+    location.hash = '#/home'; render();
   }
   function stopScan() { timers.forEach(clearTimeout); timers = []; if (bridge && cur()) bridge.stopScan(cur().id); scanning = false; if (cur()) { cur().status = 'dihentikan'; save(); } pushLog('■ dihentikan'); render(); }
   function demoScan(p) {
@@ -240,30 +268,36 @@
   const VIEWS = {
     home() {
       const p = cur(), n = S.projects.length;
-      const loading = scanning ? `<div class="card load-card"><div class="spinner"></div><h3>Loading…</h3><p id="loadMsg">${esc(log[log.length-1]||'Memproses URL…')}</p><div class="bar"><i style="width:${progress}%"></i></div><p class="meta">${progress}%</p></div>` : '';
-      return `${loading}<div class="card"><h2>1. Paste URL</h2>
-      <label>Tempel URL website (HTTPS)</label>
-      <input id="url" type="url" inputmode="url" placeholder="https://contoh.com" value="${esc(p ? p.url : '')}">
-      <label>Tingkat akses</label>
-      <select id="level"><option value="A">Level A — Public</option><option value="B">Level B — Authorized</option><option value="C">Level C — Owner</option></select>
-      <label class="chk" style="margin-top:12px"><input type="checkbox" id="auth"><span>Saya punya izin menganalisis &amp; menyalin resource website ini.</span></label>
-      <button class="full" id="goPreview" style="margin-top:14px">2. Preview &amp; Rekam → Download ZIP</button>
-      <button class="sec full" id="go" style="margin-top:8px">Scan cepat saja</button>
-      <div class="note" style="margin-top:10px">Alur jelas: <b>Paste URL</b> → <b>Loading</b> → <b>Download full ZIP</b> ke internal HP → <b>Load ZIP</b> → <b>Edit web</b>.</div></div>
-      <div class="card"><h2>3. ZIP di HP</h2>
-      <button class="full" id="btnSaveZipNow" ${p && p.status==='selesai'?'':'disabled'}>Download / Simpan ZIP ke Internal</button>
-      <button class="sec full" id="btnListZips" style="margin-top:8px">Load ZIP dari Internal</button>
-      <div id="zipList" class="note" style="margin-top:8px">Ketuk “Load ZIP” untuk daftar file di folder Ambrus.</div></div>
-      <div class="card"><h2>4. Edit Web dari ZIP</h2>
-      <p class="meta">Setelah ZIP dimuat / proyek selesai, buka editor.</p>
-      <button class="full" id="btnEditWeb" ${p?'':'disabled'}>Buka Website Editor</button></div>
-      ${p ? `<div class="card"><h3>Proyek aktif</h3><div class="u" style="word-break:break-all">${esc(mask(p.url))}</div>
-      <div class="meta">${tag('Level ' + p.level)}${tag(p.status, p.status === 'selesai' ? 'ok' : 'warn')}${p.demo ? tag('data demo', 'warn') : ''}</div>
-      <div class="grid" style="margin-top:10px"><div class="stat"><b>${p.resources.length}</b><span>Resource</span></div><div class="stat"><b>${Object.keys(p.domains).length}</b><span>Domain</span></div><div class="stat"><b>${p.endpoints.length}</b><span>Endpoint</span></div><div class="stat"><b>${p.resources.filter(r => r.status !== 'ok').length}</b><span>Gagal</span></div></div>
-      <div class="row" style="margin-top:12px"><button class="sec" onclick="location.hash='#/browser'">Live feed</button><button class="sec" onclick="location.hash='#/analyze/resources'">Analisis</button><button onclick="location.hash='#/export'">Ekspor ZIP</button></div></div>` : ''}
-      <div class="card"><h3>Menu cepat</h3><div class="menu">
-      ${[['#/analyze/resources', 'Resource Analyzer'], ['#/analyze/domains', 'Domain Analyzer'], ['#/analyze/server', 'Server Analyzer'], ['#/analyze/api', 'API Analyzer'], ['#/analyze/game', 'Game Resource Analyzer'], ['#/analyze/deps', 'Dependency Map'], ['#/migration', 'API Migration'], ['#/editor', 'Website Editor'], ['#/deploy', 'Deployment Manager']].map(m => `<a href="${m[0]}"><span>${m[1]}</span><span>›</span></a>`).join('')}</div></div>
-      <p style="color:var(--mut);font-size:12px;text-align:center">${n} proyek tersimpan · v${TOOL_VERSION}</p>`;
+      if (scanning) {
+        return `<div class="card load-card">
+          <div class="spinner"></div>
+          <h3>Mengunduh…</h3>
+          <p id="loadMsg">${esc(log[log.length-1]||'Memproses URL…')}</p>
+          <div class="bar"><i style="width:${progress}%"></i></div>
+          <p class="meta">${progress}%</p>
+          <button class="danger full" id="stop" style="margin-top:16px">Batalkan</button>
+        </div>`;
+      }
+      const done = p && p.status === 'selesai';
+      return `<div class="card hero">
+        <h2>Ambrus</h2>
+        <p class="meta">Paste URL → unduh ZIP ke HP</p>
+        <label>URL website (HTTPS)</label>
+        <input id="url" type="url" inputmode="url" autocomplete="url" placeholder="https://contoh.com" value="${esc(p && !done ? p.url : '')}">
+        <label class="chk" style="margin-top:12px"><input type="checkbox" id="auth" checked><span>Saya berizin menganalisis &amp; menyalin resource situs ini.</span></label>
+        <button class="full primary" id="goDownload" style="margin-top:16px">Download ZIP</button>
+      </div>
+      ${done ? `<div class="card">
+        <h3>Selesai</h3>
+        <div class="u" style="word-break:break-all">${esc(mask(p.url))}</div>
+        <div class="meta" style="margin-top:8px">${tag(p.status,'ok')} · ${p.resources.length} resource · ${p.endpoints.length} endpoint</div>
+        <button class="full" id="btnSaveZipNow" style="margin-top:14px">Simpan ZIP ke Internal HP</button>
+        <button class="sec full" id="btnListZips" style="margin-top:8px">Buka ZIP tersimpan</button>
+        <div id="zipList" class="note" style="margin-top:8px"></div>
+        <button class="sec full" id="btnEditWeb" style="margin-top:8px">Edit web</button>
+        <button class="sec full" id="btnNew" style="margin-top:8px">URL baru</button>
+      </div>` : ''}
+      ${n > 0 && !done ? `<p class="meta" style="text-align:center;margin-top:12px">${n} proyek · v${TOOL_VERSION}</p>` : `<p class="meta" style="text-align:center;margin-top:12px">v${TOOL_VERSION}</p>`}`;
     },
     browser() {
       const p = cur(); if (!p) return need();
@@ -403,16 +437,25 @@
   const onAll = (s, ev, fn) => document.querySelectorAll(s).forEach(e => e.addEventListener(ev, () => fn(e)));
   const BIND = {
     home() {
-      on('#goPreview', 'click', () => startScan($('#url').value, $('#level').value, $('#auth').checked, 'preview'));
-      on('#go', 'click', () => startScan($('#url').value, $('#level').value, $('#auth').checked, 'scan'));
-      on('#btnSaveZipNow', 'click', () => { if (cur()) { location.hash = '#/export'; setTimeout(() => { const b = document.getElementById('xGo'); if (b) b.click(); }, 200); } });
+      on('#goDownload', 'click', () => {
+        const url = ($('#url') && $('#url').value) || '';
+        const auth = $('#auth') ? $('#auth').checked : true;
+        startScan(url, 'A', auth, 'download');
+      });
+      on('#stop', 'click', stopScan);
+      on('#btnSaveZipNow', 'click', () => autoSaveZip());
       on('#btnListZips', 'click', () => {
         if (bridge && bridge.listZips) bridge.listZips();
-        else { $('#zipList').innerHTML = '<span class="tag warn">Hanya di APK (bridge native)</span>'; }
+        else if ($('#zipList')) $('#zipList').innerHTML = '<span class="tag warn">Hanya di APK</span>';
       });
       on('#btnEditWeb', 'click', () => { location.hash = '#/editor'; });
-      document.querySelectorAll('[data-load-zip]').forEach(el => el.onclick = () => {
-        if (bridge && bridge.loadZip) bridge.loadZip(el.getAttribute('data-load-zip'));
+      on('#btnNew', 'click', () => {
+        S.currentId = null; save();
+        const u = $('#url'); if (u) u.value = '';
+        render();
+      });
+      document.querySelectorAll('[data-load-zip]').forEach(el => {
+        el.onclick = () => { if (bridge && bridge.loadZip) bridge.loadZip(el.getAttribute('data-load-zip')); };
       });
     },
     browser() {

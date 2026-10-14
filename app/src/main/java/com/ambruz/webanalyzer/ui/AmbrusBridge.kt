@@ -78,7 +78,7 @@ class AmbrusBridge(
                 )
                 val host = try { java.net.URI(project.finalUrl ?: url).host ?: "" } catch (_: Exception) { "" }
                 emit(JSONObject().put("type", "server").put("host", host).put("status", 200).put("headers", JSONObject().put("content-type", "text/html")))
-                project.resources.forEachIndexed { i, r ->
+                project.resources.take(300).forEachIndexed { i, r ->
                     if (activeId != projectId) return@launch
                     emit(JSONObject().put("type", "resource").put("url", r.url).put("mime", r.contentType ?: "").put("size", r.sizeBytes ?: JSONObject.NULL).put("status", if (r.error == null) "ok" else "error").put("error", r.error ?: "").put("page", project.finalUrl ?: url).put("path", r.url.substringAfterLast("/").ifBlank { "file" }))
                     if (i % 3 == 0) {

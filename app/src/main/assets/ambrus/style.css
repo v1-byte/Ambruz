@@ -64,3 +64,7 @@ button.full{width:100%}
 .bar{height:6px;background:var(--panel2);border-radius:99px;overflow:hidden;margin-top:12px}
 .bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--acc),var(--acc2));border-radius:99px;transition:width .2s}
 button:disabled{opacity:.45;pointer-events:none}
+
+.hero h2{margin:0 0 4px}
+button.primary{background:linear-gradient(135deg,var(--acc),#3d6fe0);font-weight:700;font-size:16px;padding:14px}
+.bottomnav a[data-r="analyze"],.bottomnav a[data-r="editor"]{opacity:.85}
