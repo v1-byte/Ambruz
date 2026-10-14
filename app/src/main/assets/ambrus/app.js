@@ -23,7 +23,7 @@
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const bridge = window.Android || null;
   const KEY = 'ambrus.v2';
-  const TOOL_VERSION = '2.0.0-ui';
+  const TOOL_VERSION = '2.1.0-ui';
 
   /* ---------- state ---------- */
   let S = load();
@@ -147,7 +147,25 @@
       case 'dns': p.dns.push({ host: ev.host, records: ev.records || [] }); break;
       case 'progress': progress = ev.value || 0; if (ev.message) pushLog(ev.message); break;
       case 'error': scanning = false; p.status = 'gagal'; pushLog('✗ ' + ev.message); toast(ev.message); break;
-      case 'done': scanning = false; progress = 100; p.status = 'selesai'; pushLog('✔ pemindaian selesai'); toast('Pemindaian selesai'); break;
+      case 'done': scanning = false; progress = 100; p.status = 'selesai'; pushLog('✔ pemindaian selesai'); toast('Selesai — siap Download ZIP'); break;
+      case 'zip_saved': toast('ZIP disimpan: ' + (ev.path || ev.fileName || '')); pushLog('💾 ' + (ev.path || ev.fileName)); if ($('#zipList')) $('#zipList').innerHTML = '<span class="tag ok">Tersimpan</span> ' + esc(ev.path || ev.fileName || ''); break;
+      case 'zip_list': {
+        const files = ev.files || [];
+        const box = $('#zipList');
+        if (box) box.innerHTML = files.length ? files.map(f => `<div class="item"><div class="u">${esc(f.name)}</div><div class="meta">${esc(f.path)} · ${fmtSize(f.size)}</div><button data-load-zip="${esc(f.path)}">Load &amp; Edit</button></div>`).join('') : empty('Belum ada ZIP di internal');
+        document.querySelectorAll('[data-load-zip]').forEach(el => el.onclick = () => bridge && bridge.loadZip(el.getAttribute('data-load-zip')));
+        break; }
+      case 'zip_loaded': {
+        try {
+          const data = typeof ev.project === 'string' ? JSON.parse(ev.project) : ev.project;
+          if (data && data.id) {
+            const idx = S.projects.findIndex(x => x.id === data.id);
+            if (idx >= 0) S.projects[idx] = Object.assign(S.projects[idx], data);
+            else S.projects.unshift(data);
+            S.currentId = data.id; save(); toast('ZIP dimuat — buka Editor'); location.hash = '#/editor'; render();
+          }
+        } catch (e) { toast('Gagal parse ZIP: ' + e.message); }
+        break; }
     }
     save(); softRender();
   }
@@ -222,15 +240,23 @@
   const VIEWS = {
     home() {
       const p = cur(), n = S.projects.length;
-      return `<div class="card"><h2>Pindai Website Baru</h2>
-      <label>URL (HTTPS)</label><input id="url" type="url" inputmode="url" placeholder="https://contoh.com/#/halaman" value="${esc(p ? p.url : '')}">
+      const loading = scanning ? `<div class="card load-card"><div class="spinner"></div><h3>Loading…</h3><p id="loadMsg">${esc(log[log.length-1]||'Memproses URL…')}</p><div class="bar"><i style="width:${progress}%"></i></div><p class="meta">${progress}%</p></div>` : '';
+      return `${loading}<div class="card"><h2>1. Paste URL</h2>
+      <label>Tempel URL website (HTTPS)</label>
+      <input id="url" type="url" inputmode="url" placeholder="https://contoh.com" value="${esc(p ? p.url : '')}">
       <label>Tingkat akses</label>
-      <select id="level"><option value="A">Level A — Public Inspection</option><option value="B">Level B — Authorized Project Access</option><option value="C">Level C — Owner-Controlled Rebuild</option></select>
-      <label class="chk" style="margin-top:12px"><input type="checkbox" id="auth"><span>Saya pemilik website ini atau memiliki izin tertulis untuk menganalisis dan menyalin resource-nya.</span></label>
-      <div class="note">Hasil bergantung pada akses yang tersedia. Backend privat, logika server game, dan database tidak dapat disalin hanya dari URL — komponen itu dicatat sebagai <i>tidak tersedia</i>, bukan ditebak.</div>
-      <div class="note" style="margin-top:10px"><b>Alur disarankan:</b> Preview &amp; Rekam → navigasi halaman yang ingin disalin → Selesai &amp; Copy → Analisis → Ekspor ZIP. Atau pakai Scan cepat tanpa membuka situs.</div>
-      <button class="full" id="goPreview">▶ Preview &amp; Rekam (disarankan)</button>
-      <button class="sec full" id="go" style="margin-top:8px">Scan cepat (tanpa preview)</button></div>
+      <select id="level"><option value="A">Level A — Public</option><option value="B">Level B — Authorized</option><option value="C">Level C — Owner</option></select>
+      <label class="chk" style="margin-top:12px"><input type="checkbox" id="auth"><span>Saya punya izin menganalisis &amp; menyalin resource website ini.</span></label>
+      <button class="full" id="goPreview" style="margin-top:14px">2. Preview &amp; Rekam → Download ZIP</button>
+      <button class="sec full" id="go" style="margin-top:8px">Scan cepat saja</button>
+      <div class="note" style="margin-top:10px">Alur jelas: <b>Paste URL</b> → <b>Loading</b> → <b>Download full ZIP</b> ke internal HP → <b>Load ZIP</b> → <b>Edit web</b>.</div></div>
+      <div class="card"><h2>3. ZIP di HP</h2>
+      <button class="full" id="btnSaveZipNow" ${p && p.status==='selesai'?'':'disabled'}>Download / Simpan ZIP ke Internal</button>
+      <button class="sec full" id="btnListZips" style="margin-top:8px">Load ZIP dari Internal</button>
+      <div id="zipList" class="note" style="margin-top:8px">Ketuk “Load ZIP” untuk daftar file di folder Ambrus.</div></div>
+      <div class="card"><h2>4. Edit Web dari ZIP</h2>
+      <p class="meta">Setelah ZIP dimuat / proyek selesai, buka editor.</p>
+      <button class="full" id="btnEditWeb" ${p?'':'disabled'}>Buka Website Editor</button></div>
       ${p ? `<div class="card"><h3>Proyek aktif</h3><div class="u" style="word-break:break-all">${esc(mask(p.url))}</div>
       <div class="meta">${tag('Level ' + p.level)}${tag(p.status, p.status === 'selesai' ? 'ok' : 'warn')}${p.demo ? tag('data demo', 'warn') : ''}</div>
       <div class="grid" style="margin-top:10px"><div class="stat"><b>${p.resources.length}</b><span>Resource</span></div><div class="stat"><b>${Object.keys(p.domains).length}</b><span>Domain</span></div><div class="stat"><b>${p.endpoints.length}</b><span>Endpoint</span></div><div class="stat"><b>${p.resources.filter(r => r.status !== 'ok').length}</b><span>Gagal</span></div></div>
@@ -259,7 +285,7 @@
     },
     editor() {
       const p = cur(); if (!p) return '<h2>Website Editor</h2>' + need();
-      const e = p.edits, d = e.draft || (e.draft = JSON.parse(JSON.stringify({ siteName: e.siteName, primary: e.primary, accent: e.accent, logo: e.logo, favicon: e.favicon, apiBase: e.apiBase, replacements: e.replacements })));
+      const e = p.edits, d = e.draft || (e.draft = JSON.parse(JSON.stringify({ siteName: e.siteName, primary: e.primary, accent: e.accent, logo: e.logo, favicon: e.favicon, apiBase: e.apiBase, replacements: e.replacements, htmlDraft: e.htmlDraft || (p.websiteFiles && (p.websiteFiles['index.html'] || Object.values(p.websiteFiles)[0])) || '' })));
       return `<h2>Website Editor</h2><div class="card"><div class="note">Editor hanya mengubah konfigurasi/tema/teks yang dipahami. Versi disimpan sebelum perubahan (backup otomatis).</div>
       <label>Nama website</label><input data-f="siteName" value="${esc(d.siteName)}">
       <div class="row"><div style="flex:1"><label>Warna utama</label><input type="color" data-f="primary" value="${esc(d.primary)}"></div><div style="flex:1"><label>Warna aksen</label><input type="color" data-f="accent" value="${esc(d.accent)}"></div></div>
@@ -268,6 +294,8 @@
       <label>Base URL API (konfigurasi frontend)</label><input data-f="apiBase" placeholder="https://api.domain-saya.com" value="${esc(d.apiBase)}">
       <label>Ganti teks (cari ⇒ ganti, satu per baris: <code>cari=&gt;ganti</code>)</label>
       <textarea data-f="repl">${esc((d.replacements || []).map(r => r.find + '=>' + r.rep).join('\n'))}</textarea></div>
+      <label>HTML dari ZIP (edit web)</label>
+      <textarea data-f="htmlDraft" rows="10" style="width:100%;font-family:monospace;font-size:12px;background:var(--panel2);color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:10px">${esc((d.htmlDraft != null ? d.htmlDraft : (e.htmlDraft || (p.websiteFiles && (p.websiteFiles["index.html"] || Object.values(p.websiteFiles)[0])) || "") ))}</textarea></div>
       <div class="card"><h3>Pratinjau</h3><iframe class="prev" sandbox id="prev" srcdoc="${esc(previewDoc(d))}"></iframe></div>
       <div class="row"><button id="saveEdit">Simpan versi</button><button class="sec" id="revert">Batalkan perubahan</button><button class="sec" id="diff">Bandingkan</button></div>
       <div class="card" style="margin-top:12px"><h3>Riwayat versi (${e.versions.length})</h3>${e.versions.map((v, i) => `<div class="item"><div class="row sp"><span>v${i + 1} · ${fmtTime(v.at)}</span><button class="sec" data-restore="${i}">Pulihkan</button></div></div>`).join('') || empty('Belum ada versi tersimpan')}</div><div id="diffOut"></div>`;
@@ -377,6 +405,15 @@
     home() {
       on('#goPreview', 'click', () => startScan($('#url').value, $('#level').value, $('#auth').checked, 'preview'));
       on('#go', 'click', () => startScan($('#url').value, $('#level').value, $('#auth').checked, 'scan'));
+      on('#btnSaveZipNow', 'click', () => { if (cur()) { location.hash = '#/export'; setTimeout(() => { const b = document.getElementById('xGo'); if (b) b.click(); }, 200); } });
+      on('#btnListZips', 'click', () => {
+        if (bridge && bridge.listZips) bridge.listZips();
+        else { $('#zipList').innerHTML = '<span class="tag warn">Hanya di APK (bridge native)</span>'; }
+      });
+      on('#btnEditWeb', 'click', () => { location.hash = '#/editor'; });
+      document.querySelectorAll('[data-load-zip]').forEach(el => el.onclick = () => {
+        if (bridge && bridge.loadZip) bridge.loadZip(el.getAttribute('data-load-zip'));
+      });
     },
     browser() {
       on('#stop', 'click', stopScan);
@@ -388,9 +425,9 @@
     analyze() { onAll('[data-cat]', 'click', b => { A._f = b.dataset.cat; render(); }); },
     editor() {
       const p = cur(); if (!p) return; const e = p.edits, d = e.draft;
-      const upd = () => { $('#prev').srcdoc = previewDoc(d); save(); };
+      const upd = () => { const iframe = $('#prev'); if (!iframe) return; if (d.htmlDraft && String(d.htmlDraft).length > 20) iframe.srcdoc = d.htmlDraft; else iframe.srcdoc = previewDoc(d); save(); };
       onAll('[data-f]', 'input', i => { const f = i.dataset.f; if (f === 'repl') d.replacements = i.value.split('\n').map(l => l.split('=>')).filter(a => a.length === 2 && a[0]).map(a => ({ find: a[0], rep: a[1] })); else d[f] = i.value; upd(); });
-      on('#saveEdit', 'click', () => { e.versions.push({ at: Date.now(), snap: JSON.stringify({ siteName: e.siteName, primary: e.primary, accent: e.accent, logo: e.logo, favicon: e.favicon, apiBase: e.apiBase, replacements: e.replacements }) }); Object.assign(e, JSON.parse(JSON.stringify(d))); save(); toast('Versi tersimpan (backup versi sebelumnya)'); render(); });
+      on('#saveEdit', 'click', () => { e.versions.push({ at: Date.now(), snap: JSON.stringify({ siteName: e.siteName, primary: e.primary, accent: e.accent, logo: e.logo, favicon: e.favicon, apiBase: e.apiBase, replacements: e.replacements, htmlDraft: e.htmlDraft }) }); Object.assign(e, JSON.parse(JSON.stringify(d))); e.htmlDraft = d.htmlDraft || e.htmlDraft; save(); toast('Versi tersimpan'); render(); });
       on('#revert', 'click', () => { e.draft = null; save(); render(); toast('Perubahan dibatalkan'); });
       on('#diff', 'click', () => { const keys = ['siteName', 'primary', 'accent', 'logo', 'favicon', 'apiBase']; const rows = keys.filter(k => e[k] !== d[k]).map(k => `<tr><td>${k}</td><td>${esc(e[k] || '–')}</td><td>${esc(d[k] || '–')}</td></tr>`); $('#diffOut').innerHTML = `<div class="card"><h3>Perubahan belum disimpan</h3><table><tr><th>Field</th><th>Tersimpan</th><th>Draft</th></tr>${rows.join('') || '<tr><td colspan=3>Tidak ada perubahan</td></tr>'}</table></div>`; });
       onAll('[data-restore]', 'click', b => { const v = e.versions[+b.dataset.restore]; Object.assign(e, JSON.parse(v.snap)); e.draft = null; save(); render(); toast('Versi dipulihkan'); });
@@ -471,6 +508,8 @@
       add('report/limitations.json', J(lim));
       const withContent = p.resources.filter(r => r.status === 'ok' && typeof r.content === 'string');
       if (inc) withContent.forEach(r => add('website/' + (r.path || 'file'), r.content));
+      if (p.edits && p.edits.htmlDraft) add('website/index.html', p.edits.htmlDraft);
+      else if (p.websiteFiles) Object.keys(p.websiteFiles).forEach(k => add('website/' + k, p.websiteFiles[k]));
       else add('website/README.md', 'Isi resource tidak disertakan.');
       add('backend/README.md', 'Backend baru belum dikembangkan. Lihat migrasi API di project.json.'); add('backend/api-spec.json', J({ mode: p.migration.mode, newBase: p.migration.newBase, map: p.migration.map }));
       const d = deployFiles(p); add('deployment/README.md', d['README.md']); add('deployment/deployment-config.example', d['wrangler.toml.example']);
