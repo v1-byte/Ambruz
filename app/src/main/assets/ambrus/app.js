@@ -2,11 +2,11 @@
  *
  * KONTRAK BRIDGE (Kotlin <-> JS)
  *  JS -> Native (addJavascriptInterface(obj, "Android")), semua argumen string JSON:
- *    Android.startScan(json)   {projectId,url,level,authorized,maxResources,timeout}  // scan cepat
- *    Android.startPreview(json){projectId,url,level,authorized}  // preview + rekam sesi navigasi
+ *    Android.startScan(json)   {projectId,url,level,authorized,maxResources,timeout}
  *    Android.stopScan(projectId)
- *    Android.saveZip(base64, fileName)     // simpan ZIP ke penyimpanan
- *    Android.openUrl(url)                  // buka di browser eksternal
+ *    Android.saveZip(base64, fileName)
+ *    Android.listZips() / Android.loadZip(path)
+ *    Android.openUrl(url)
  *  Native -> JS (webView.evaluateJavascript("Ambrus.emit(<json>)")):
  *    {type:'redirect', from, to}
  *    {type:'resource', url, mime, size, status, page, hash, path, error, content}  // content: teks opsional
@@ -23,7 +23,7 @@
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const bridge = window.Android || null;
   const KEY = 'ambrus.v2';
-  const TOOL_VERSION = '2.2.0-ui';
+  const TOOL_VERSION = '2.3.0-ui';
 
   /* ---------- state ---------- */
   let S = load();
@@ -147,78 +147,54 @@
       case 'dns': p.dns.push({ host: ev.host, records: ev.records || [] }); break;
       case 'progress': progress = ev.value || 0; if (ev.message) pushLog(ev.message); break;
       case 'error': scanning = false; p.status = 'gagal'; pushLog('✗ ' + ev.message); toast(ev.message); break;
-      case 'done': scanning = false; progress = 100; p.status = 'selesai'; pushLog('✔ selesai'); toast('Selesai'); if (p.recordMode === 'download') { setTimeout(() => { location.hash = '#/home'; render(); setTimeout(autoSaveZip, 400); }, 300); } break;
-      case 'zip_saved': toast('ZIP disimpan: ' + (ev.path || ev.fileName || '')); pushLog('💾 ' + (ev.path || ev.fileName)); if ($('#zipList')) $('#zipList').innerHTML = '<span class="tag ok">Tersimpan</span> ' + esc(ev.path || ev.fileName || ''); break;
+      case 'done': scanning = false; progress = 100; p.status = 'selesai'; pushLog('✔ selesai'); toast('Selesai'); if (p.recordMode === 'download') { setTimeout(function(){ location.hash='#/home'; render(); setTimeout(autoSaveZip, 400); }, 200); } break;
+      case 'zip_saved': toast('ZIP disimpan: ' + (ev.path || ev.fileName || '')); pushLog('💾 ' + (ev.path || ev.fileName || '')); break;
       case 'zip_list': {
         const files = ev.files || [];
         const box = $('#zipList');
-        if (box) box.innerHTML = files.length ? files.map(f => `<div class="item"><div class="u">${esc(f.name)}</div><div class="meta">${esc(f.path)} · ${fmtSize(f.size)}</div><button data-load-zip="${esc(f.path)}">Load &amp; Edit</button></div>`).join('') : empty('Belum ada ZIP di internal');
-        document.querySelectorAll('[data-load-zip]').forEach(el => el.onclick = () => bridge && bridge.loadZip(el.getAttribute('data-load-zip')));
+        if (box) box.innerHTML = files.length ? files.map(function(f){ return '<div class="item"><div class="u">'+esc(f.name)+'</div><div class="meta">'+esc(f.path)+'</div><button data-load-zip="'+esc(f.path)+'">Load</button></div>'; }).join('') : '<div class="meta">Belum ada ZIP</div>';
+        document.querySelectorAll('[data-load-zip]').forEach(function(el){ el.onclick = function(){ bridge && bridge.loadZip(el.getAttribute('data-load-zip')); }; });
         break; }
       case 'zip_loaded': {
         try {
           const data = typeof ev.project === 'string' ? JSON.parse(ev.project) : ev.project;
           if (data && data.id) {
-            const idx = S.projects.findIndex(x => x.id === data.id);
-            if (idx >= 0) S.projects[idx] = Object.assign(S.projects[idx], data);
-            else S.projects.unshift(data);
-            S.currentId = data.id; save(); toast('ZIP dimuat — buka Editor'); location.hash = '#/editor'; render();
+            const idx = S.projects.findIndex(function(x){ return x.id === data.id; });
+            if (idx >= 0) S.projects[idx] = Object.assign(S.projects[idx], data); else S.projects.unshift(data);
+            S.currentId = data.id; save(); toast('ZIP dimuat'); location.hash = '#/editor'; render();
           }
-        } catch (e) { toast('Gagal parse ZIP: ' + e.message); }
+        } catch (e) { toast('Gagal load ZIP'); }
         break; }
     }
-    try { save(); if (scanning) { const m=$('#loadMsg'); const b=document.querySelector('.bar>i'); if(m) m.textContent=log[log.length-1]||''; if(b) b.style.width=progress+'%'; const meta=document.querySelector('.load-card .meta'); if(meta) meta.textContent=progress+'%'; } else softRender(); } catch (e) { try { pushLog('ui:'+e.message); } catch(_){} }
+    try { save(); if (scanning) { var m=$('#loadMsg'); var b=document.querySelector('.bar>i'); if(m) m.textContent=log[log.length-1]||''; if(b) b.style.width=progress+'%'; } else softRender(); } catch (e) {}
   }
   function guessPath(u) { try { const x = new URL(u); return 'assets/' + (x.hostname === new URL(cur().url).hostname ? '' : x.hostname + '/') + (x.pathname.replace(/^\//, '') || 'index'); } catch (e) { return 'assets/file'; } }
   function addDomain(p, host, src) { const d = p.domains[host] || (p.domains[host] = { host, sources: [], count: 0 }); d.count++; if (!d.sources.includes(src) && d.sources.length < 6) d.sources.push(src); }
   function pushLog(m) { log.push(new Date().toLocaleTimeString('id-ID') + ' ' + m); if (log.length > 300) log.shift(); }
   window.Ambrus = { emit };
-  window.onerror = function(m){ try{ pushLog('JS:'+m); }catch(e){} return true; };
 
   /* ---------- scan control ---------- */
   function autoSaveZip() {
-    const p = cur(); if (!p) return toast('Belum ada proyek');
-    // trigger existing export then native save
     try {
-      const xGo = document.getElementById('xGo');
       if (location.hash !== '#/export') {
-        // build zip in-memory via doExport path: temporarily call export logic
         location.hash = '#/export';
-        setTimeout(() => {
-          const b = document.getElementById('xGo');
-          if (b) b.click();
-          else toast('Buka menu Ekspor lalu unduh');
-        }, 250);
+        setTimeout(function(){ var b=document.getElementById('xGo'); if(b) b.click(); else toast('Ketuk Ekspor di menu Lainnya'); }, 250);
       } else {
-        const b = document.getElementById('xGo');
-        if (b) b.click();
+        var b=document.getElementById('xGo'); if(b) b.click();
       }
     } catch (e) { toast(e.message || 'Gagal ekspor'); }
   }
   function startScan(url, level, authorized, mode) {
     const v = validateUrl(url); if (!v.ok) return toast(v.msg);
     if (!authorized) return toast('Centang pernyataan izin terlebih dahulu');
-    const p = newProject(v.url.toString(), level, authorized); p.status = 'berjalan';
-    p.recordMode = mode || 'scan';
+    const p = newProject(v.url.toString(), level || 'A', authorized); p.status = 'berjalan';
+    p.recordMode = mode || 'download';
     S.projects.unshift(p); S.currentId = p.id; save(); log = []; progress = 0; scanning = true;
-    pushLog('▶ mulai: ' + p.url + ' (Level ' + level + ', mode ' + p.recordMode + ')');
-    if (v.url.hash) pushLog('ℹ fragmen ' + v.url.hash + ' adalah rute sisi-browser; gunakan Preview & Rekam untuk menavigasi SPA.');
-    // download/scan: native fetch only (no second Activity) — more stable
-    if (mode === 'preview' && bridge && bridge.startPreview) {
-      pushLog('● Preview + rekam');
-      try {
-        bridge.startPreview(JSON.stringify({ projectId: p.id, url: p.url, level, authorized }));
-      } catch (e) { toast('Preview gagal: ' + e.message); scanning = false; }
-      location.hash = '#/home'; render();
-      return;
-    }
+    pushLog('▶ unduh: ' + p.url);
     try {
-      if (bridge) {
-        bridge.startScan(JSON.stringify({ projectId: p.id, url: p.url, level, authorized, maxResources: S.settings.maxResources || 200, timeout: S.settings.timeout || 30 }));
-      } else demoScan(p);
-    } catch (e) {
-      scanning = false; p.status = 'gagal'; toast('Scan gagal: ' + (e.message || e));
-    }
+      if (bridge) bridge.startScan(JSON.stringify({ projectId: p.id, url: p.url, level: p.level, authorized: !!authorized, maxResources: S.settings.maxResources || 200, timeout: S.settings.timeout || 30 }));
+      else demoScan(p);
+    } catch (e) { scanning = false; p.status = 'gagal'; toast('Gagal: ' + (e.message || e)); }
     location.hash = '#/home'; render();
   }
   function stopScan() { timers.forEach(clearTimeout); timers = []; if (bridge && cur()) bridge.stopScan(cur().id); scanning = false; if (cur()) { cur().status = 'dihentikan'; save(); } pushLog('■ dihentikan'); render(); }
@@ -269,45 +245,34 @@
     home() {
       const p = cur(), n = S.projects.length;
       if (scanning) {
-        return `<div class="card load-card">
-          <div class="spinner"></div>
-          <h3>Mengunduh…</h3>
-          <p id="loadMsg">${esc(log[log.length-1]||'Memproses URL…')}</p>
-          <div class="bar"><i style="width:${progress}%"></i></div>
-          <p class="meta">${progress}%</p>
-          <button class="danger full" id="stop" style="margin-top:16px">Batalkan</button>
-        </div>`;
+        return `<div class="card load-card"><div class="spinner"></div><h3>Mengunduh…</h3><p id="loadMsg">${esc(log[log.length-1]||'Memproses URL…')}</p><div class="bar"><i style="width:${progress}%"></i></div><p class="meta">${progress}%</p><button class="danger full" id="stop" style="margin-top:16px">Batalkan</button></div>`;
       }
       const done = p && p.status === 'selesai';
-      return `<div class="card hero">
+      return `<div class="card">
         <h2>Ambrus</h2>
-        <p class="meta">Paste URL → unduh ZIP ke HP</p>
+        <p class="meta" style="margin-top:0">Paste URL → unduh ZIP ke HP</p>
         <label>URL website (HTTPS)</label>
         <input id="url" type="url" inputmode="url" autocomplete="url" placeholder="https://contoh.com" value="${esc(p && !done ? p.url : '')}">
         <label class="chk" style="margin-top:12px"><input type="checkbox" id="auth" checked><span>Saya berizin menganalisis &amp; menyalin resource situs ini.</span></label>
         <button class="full primary" id="goDownload" style="margin-top:16px">Download ZIP</button>
       </div>
-      ${done ? `<div class="card">
-        <h3>Selesai</h3>
+      ${done ? `<div class="card"><h3>Selesai</h3>
         <div class="u" style="word-break:break-all">${esc(mask(p.url))}</div>
-        <div class="meta" style="margin-top:8px">${tag(p.status,'ok')} · ${p.resources.length} resource · ${p.endpoints.length} endpoint</div>
+        <div class="meta" style="margin-top:8px">${tag(p.status,'ok')} · ${p.resources.length} resource</div>
         <button class="full" id="btnSaveZipNow" style="margin-top:14px">Simpan ZIP ke Internal HP</button>
         <button class="sec full" id="btnListZips" style="margin-top:8px">Buka ZIP tersimpan</button>
         <div id="zipList" class="note" style="margin-top:8px"></div>
         <button class="sec full" id="btnEditWeb" style="margin-top:8px">Edit web</button>
         <button class="sec full" id="btnNew" style="margin-top:8px">URL baru</button>
       </div>` : ''}
-      ${n > 0 && !done ? `<p class="meta" style="text-align:center;margin-top:12px">${n} proyek · v${TOOL_VERSION}</p>` : `<p class="meta" style="text-align:center;margin-top:12px">v${TOOL_VERSION}</p>`}`;
+      <p class="meta" style="text-align:center;margin-top:12px">v${TOOL_VERSION}</p>`;
     },
     browser() {
       const p = cur(); if (!p) return need();
       return `<h2>Website Browser</h2><div class="card">
       <div class="row sp"><b style="word-break:break-all">${esc(mask(p.finalUrl))}</b>${tag(p.status, p.status === 'selesai' ? 'ok' : 'warn')}</div>
       <div class="progress" style="margin:10px 0"><i style="width:${progress}%"></i></div>
-      <div class="row">${scanning ? '<button class="danger" id="stop">Hentikan</button>' : '<button class="sec" id="rescan">Scan cepat ulang</button>'}
-      ${bridge ? '<button id="rePreview">Preview &amp; Rekam</button>' : ''}
-      ${bridge ? '<button class="sec" id="openNative">Browser sistem</button>' : ''}</div>
-      <div class="note">Saat Preview &amp; Rekam: situs dibuka full-screen, resource yang termuat dicatat seperti sesi merekam. Ketuk <b>Selesai &amp; Copy</b> untuk menyelesaikan.</div>
+      <div class="row">${scanning ? '<button class="danger" id="stop">Hentikan</button>' : '<button class="sec" id="rescan">Pindai ulang</button>'}${bridge ? '<button class="sec" id="openNative">Buka di WebView</button>' : ''}</div>
       ${p.demo ? '<div class="note">Mode DEMO: data di bawah adalah simulasi untuk menguji tampilan, bukan hasil pemindaian sungguhan.</div>' : ''}</div>
       <div class="card"><h3>Live feed</h3><div class="log" id="logbox">${log.map(l => '<div>' + esc(l) + '</div>').join('') || '<div>Menunggu…</div>'}</div></div>`;
     },
@@ -319,7 +284,7 @@
     },
     editor() {
       const p = cur(); if (!p) return '<h2>Website Editor</h2>' + need();
-      const e = p.edits, d = e.draft || (e.draft = JSON.parse(JSON.stringify({ siteName: e.siteName, primary: e.primary, accent: e.accent, logo: e.logo, favicon: e.favicon, apiBase: e.apiBase, replacements: e.replacements, htmlDraft: e.htmlDraft || (p.websiteFiles && (p.websiteFiles['index.html'] || Object.values(p.websiteFiles)[0])) || '' })));
+      const e = p.edits, d = e.draft || (e.draft = JSON.parse(JSON.stringify({ siteName: e.siteName, primary: e.primary, accent: e.accent, logo: e.logo, favicon: e.favicon, apiBase: e.apiBase, replacements: e.replacements })));
       return `<h2>Website Editor</h2><div class="card"><div class="note">Editor hanya mengubah konfigurasi/tema/teks yang dipahami. Versi disimpan sebelum perubahan (backup otomatis).</div>
       <label>Nama website</label><input data-f="siteName" value="${esc(d.siteName)}">
       <div class="row"><div style="flex:1"><label>Warna utama</label><input type="color" data-f="primary" value="${esc(d.primary)}"></div><div style="flex:1"><label>Warna aksen</label><input type="color" data-f="accent" value="${esc(d.accent)}"></div></div>
@@ -328,8 +293,6 @@
       <label>Base URL API (konfigurasi frontend)</label><input data-f="apiBase" placeholder="https://api.domain-saya.com" value="${esc(d.apiBase)}">
       <label>Ganti teks (cari ⇒ ganti, satu per baris: <code>cari=&gt;ganti</code>)</label>
       <textarea data-f="repl">${esc((d.replacements || []).map(r => r.find + '=>' + r.rep).join('\n'))}</textarea></div>
-      <label>HTML dari ZIP (edit web)</label>
-      <textarea data-f="htmlDraft" rows="10" style="width:100%;font-family:monospace;font-size:12px;background:var(--panel2);color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:10px">${esc((d.htmlDraft != null ? d.htmlDraft : (e.htmlDraft || (p.websiteFiles && (p.websiteFiles["index.html"] || Object.values(p.websiteFiles)[0])) || "") ))}</textarea></div>
       <div class="card"><h3>Pratinjau</h3><iframe class="prev" sandbox id="prev" srcdoc="${esc(previewDoc(d))}"></iframe></div>
       <div class="row"><button id="saveEdit">Simpan versi</button><button class="sec" id="revert">Batalkan perubahan</button><button class="sec" id="diff">Bandingkan</button></div>
       <div class="card" style="margin-top:12px"><h3>Riwayat versi (${e.versions.length})</h3>${e.versions.map((v, i) => `<div class="item"><div class="row sp"><span>v${i + 1} · ${fmtTime(v.at)}</span><button class="sec" data-restore="${i}">Pulihkan</button></div></div>`).join('') || empty('Belum ada versi tersimpan')}</div><div id="diffOut"></div>`;
@@ -437,40 +400,20 @@
   const onAll = (s, ev, fn) => document.querySelectorAll(s).forEach(e => e.addEventListener(ev, () => fn(e)));
   const BIND = {
     home() {
-      on('#goDownload', 'click', () => {
-        const url = ($('#url') && $('#url').value) || '';
-        const auth = $('#auth') ? $('#auth').checked : true;
-        startScan(url, 'A', auth, 'download');
-      });
+      on('#goDownload', 'click', () => startScan(($('#url')&&$('#url').value)||'', 'A', $('#auth')?$('#auth').checked:true, 'download'));
       on('#stop', 'click', stopScan);
       on('#btnSaveZipNow', 'click', () => autoSaveZip());
-      on('#btnListZips', 'click', () => {
-        if (bridge && bridge.listZips) bridge.listZips();
-        else if ($('#zipList')) $('#zipList').innerHTML = '<span class="tag warn">Hanya di APK</span>';
-      });
-      on('#btnEditWeb', 'click', () => { location.hash = '#/editor'; });
-      on('#btnNew', 'click', () => {
-        S.currentId = null; save();
-        const u = $('#url'); if (u) u.value = '';
-        render();
-      });
-      document.querySelectorAll('[data-load-zip]').forEach(el => {
-        el.onclick = () => { if (bridge && bridge.loadZip) bridge.loadZip(el.getAttribute('data-load-zip')); };
-      });
+      on('#btnListZips', 'click', () => { if (bridge && bridge.listZips) bridge.listZips(); else if ($('#zipList')) $('#zipList').innerHTML='<span class="tag warn">Hanya di APK</span>'; });
+      on('#btnEditWeb', 'click', () => { location.hash='#/editor'; });
+      on('#btnNew', 'click', () => { S.currentId=null; save(); render(); });
     },
-    browser() {
-      on('#stop', 'click', stopScan);
-      on('#rescan', 'click', () => { const p = cur(); startScan(p.url, p.level, true, 'scan'); });
-      on('#rePreview', 'click', () => { const p = cur(); if (p) startScan(p.url, p.level, true, 'preview'); });
-      on('#openNative', 'click', () => bridge && bridge.openUrl(cur().url));
-      const b = $('#logbox'); if (b) b.scrollTop = b.scrollHeight;
-    },
+    browser() { on('#stop', 'click', stopScan); on('#rescan', 'click', () => { const p = cur(); startScan(p.url, p.level, true); }); on('#openNative', 'click', () => bridge.openUrl(cur().url)); const b = $('#logbox'); if (b) b.scrollTop = b.scrollHeight; },
     analyze() { onAll('[data-cat]', 'click', b => { A._f = b.dataset.cat; render(); }); },
     editor() {
       const p = cur(); if (!p) return; const e = p.edits, d = e.draft;
-      const upd = () => { const iframe = $('#prev'); if (!iframe) return; if (d.htmlDraft && String(d.htmlDraft).length > 20) iframe.srcdoc = d.htmlDraft; else iframe.srcdoc = previewDoc(d); save(); };
+      const upd = () => { $('#prev').srcdoc = previewDoc(d); save(); };
       onAll('[data-f]', 'input', i => { const f = i.dataset.f; if (f === 'repl') d.replacements = i.value.split('\n').map(l => l.split('=>')).filter(a => a.length === 2 && a[0]).map(a => ({ find: a[0], rep: a[1] })); else d[f] = i.value; upd(); });
-      on('#saveEdit', 'click', () => { e.versions.push({ at: Date.now(), snap: JSON.stringify({ siteName: e.siteName, primary: e.primary, accent: e.accent, logo: e.logo, favicon: e.favicon, apiBase: e.apiBase, replacements: e.replacements, htmlDraft: e.htmlDraft }) }); Object.assign(e, JSON.parse(JSON.stringify(d))); e.htmlDraft = d.htmlDraft || e.htmlDraft; save(); toast('Versi tersimpan'); render(); });
+      on('#saveEdit', 'click', () => { e.versions.push({ at: Date.now(), snap: JSON.stringify({ siteName: e.siteName, primary: e.primary, accent: e.accent, logo: e.logo, favicon: e.favicon, apiBase: e.apiBase, replacements: e.replacements }) }); Object.assign(e, JSON.parse(JSON.stringify(d))); save(); toast('Versi tersimpan (backup versi sebelumnya)'); render(); });
       on('#revert', 'click', () => { e.draft = null; save(); render(); toast('Perubahan dibatalkan'); });
       on('#diff', 'click', () => { const keys = ['siteName', 'primary', 'accent', 'logo', 'favicon', 'apiBase']; const rows = keys.filter(k => e[k] !== d[k]).map(k => `<tr><td>${k}</td><td>${esc(e[k] || '–')}</td><td>${esc(d[k] || '–')}</td></tr>`); $('#diffOut').innerHTML = `<div class="card"><h3>Perubahan belum disimpan</h3><table><tr><th>Field</th><th>Tersimpan</th><th>Draft</th></tr>${rows.join('') || '<tr><td colspan=3>Tidak ada perubahan</td></tr>'}</table></div>`; });
       onAll('[data-restore]', 'click', b => { const v = e.versions[+b.dataset.restore]; Object.assign(e, JSON.parse(v.snap)); e.draft = null; save(); render(); toast('Versi dipulihkan'); });
@@ -551,8 +494,6 @@
       add('report/limitations.json', J(lim));
       const withContent = p.resources.filter(r => r.status === 'ok' && typeof r.content === 'string');
       if (inc) withContent.forEach(r => add('website/' + (r.path || 'file'), r.content));
-      if (p.edits && p.edits.htmlDraft) add('website/index.html', p.edits.htmlDraft);
-      else if (p.websiteFiles) Object.keys(p.websiteFiles).forEach(k => add('website/' + k, p.websiteFiles[k]));
       else add('website/README.md', 'Isi resource tidak disertakan.');
       add('backend/README.md', 'Backend baru belum dikembangkan. Lihat migrasi API di project.json.'); add('backend/api-spec.json', J({ mode: p.migration.mode, newBase: p.migration.newBase, map: p.migration.map }));
       const d = deployFiles(p); add('deployment/README.md', d['README.md']); add('deployment/deployment-config.example', d['wrangler.toml.example']);
