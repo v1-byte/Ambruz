@@ -2,10 +2,11 @@
  *
  * KONTRAK BRIDGE (Kotlin <-> JS)
  *  JS -> Native (addJavascriptInterface(obj, "Android")), semua argumen string JSON:
- *    Android.startScan(json)   {projectId,url,level,authorized,maxResources,timeout}
+ *    Android.startScan(json)   {projectId,url,level,authorized,maxResources,timeout}  // scan cepat
+ *    Android.startPreview(json){projectId,url,level,authorized}  // preview + rekam sesi navigasi
  *    Android.stopScan(projectId)
  *    Android.saveZip(base64, fileName)     // simpan ZIP ke penyimpanan
- *    Android.openUrl(url)                  // pratinjau di WebView native
+ *    Android.openUrl(url)                  // buka di browser eksternal
  *  Native -> JS (webView.evaluateJavascript("Ambrus.emit(<json>)")):
  *    {type:'redirect', from, to}
  *    {type:'resource', url, mime, size, status, page, hash, path, error, content}  // content: teks opsional
@@ -156,13 +157,20 @@
   window.Ambrus = { emit };
 
   /* ---------- scan control ---------- */
-  function startScan(url, level, authorized) {
+  function startScan(url, level, authorized, mode) {
     const v = validateUrl(url); if (!v.ok) return toast(v.msg);
     if (!authorized) return toast('Centang pernyataan izin terlebih dahulu');
     const p = newProject(v.url.toString(), level, authorized); p.status = 'berjalan';
+    p.recordMode = mode || 'scan';
     S.projects.unshift(p); S.currentId = p.id; save(); log = []; progress = 0; scanning = true;
-    pushLog('▶ mulai: ' + p.url + ' (Level ' + level + ')');
-    if (v.url.hash) pushLog('ℹ fragmen ' + v.url.hash + ' adalah rute sisi-browser, tidak dikirim ke server; dianalisis lewat navigasi WebView.');
+    pushLog('▶ mulai: ' + p.url + ' (Level ' + level + ', mode ' + p.recordMode + ')');
+    if (v.url.hash) pushLog('ℹ fragmen ' + v.url.hash + ' adalah rute sisi-browser; gunakan Preview & Rekam untuk menavigasi SPA.');
+    if (mode === 'preview' && bridge && bridge.startPreview) {
+      pushLog('● Preview + rekam: buka situs, navigasi seperti merekam, lalu ketuk Selesai & Copy');
+      bridge.startPreview(JSON.stringify({ projectId: p.id, url: p.url, level, authorized }));
+      location.hash = '#/browser'; render();
+      return;
+    }
     if (bridge) { bridge.startScan(JSON.stringify({ projectId: p.id, url: p.url, level, authorized, maxResources: S.settings.maxResources, timeout: S.settings.timeout })); }
     else demoScan(p);
     location.hash = '#/browser'; render();
@@ -220,7 +228,9 @@
       <select id="level"><option value="A">Level A — Public Inspection</option><option value="B">Level B — Authorized Project Access</option><option value="C">Level C — Owner-Controlled Rebuild</option></select>
       <label class="chk" style="margin-top:12px"><input type="checkbox" id="auth"><span>Saya pemilik website ini atau memiliki izin tertulis untuk menganalisis dan menyalin resource-nya.</span></label>
       <div class="note">Hasil bergantung pada akses yang tersedia. Backend privat, logika server game, dan database tidak dapat disalin hanya dari URL — komponen itu dicatat sebagai <i>tidak tersedia</i>, bukan ditebak.</div>
-      <button class="full" id="go">Mulai Pemindaian</button></div>
+      <div class="note" style="margin-top:10px"><b>Alur disarankan:</b> Preview &amp; Rekam → navigasi halaman yang ingin disalin → Selesai &amp; Copy → Analisis → Ekspor ZIP. Atau pakai Scan cepat tanpa membuka situs.</div>
+      <button class="full" id="goPreview">▶ Preview &amp; Rekam (disarankan)</button>
+      <button class="sec full" id="go" style="margin-top:8px">Scan cepat (tanpa preview)</button></div>
       ${p ? `<div class="card"><h3>Proyek aktif</h3><div class="u" style="word-break:break-all">${esc(mask(p.url))}</div>
       <div class="meta">${tag('Level ' + p.level)}${tag(p.status, p.status === 'selesai' ? 'ok' : 'warn')}${p.demo ? tag('data demo', 'warn') : ''}</div>
       <div class="grid" style="margin-top:10px"><div class="stat"><b>${p.resources.length}</b><span>Resource</span></div><div class="stat"><b>${Object.keys(p.domains).length}</b><span>Domain</span></div><div class="stat"><b>${p.endpoints.length}</b><span>Endpoint</span></div><div class="stat"><b>${p.resources.filter(r => r.status !== 'ok').length}</b><span>Gagal</span></div></div>
@@ -234,7 +244,10 @@
       return `<h2>Website Browser</h2><div class="card">
       <div class="row sp"><b style="word-break:break-all">${esc(mask(p.finalUrl))}</b>${tag(p.status, p.status === 'selesai' ? 'ok' : 'warn')}</div>
       <div class="progress" style="margin:10px 0"><i style="width:${progress}%"></i></div>
-      <div class="row">${scanning ? '<button class="danger" id="stop">Hentikan</button>' : '<button class="sec" id="rescan">Pindai ulang</button>'}${bridge ? '<button class="sec" id="openNative">Buka di WebView</button>' : ''}</div>
+      <div class="row">${scanning ? '<button class="danger" id="stop">Hentikan</button>' : '<button class="sec" id="rescan">Scan cepat ulang</button>'}
+      ${bridge ? '<button id="rePreview">Preview &amp; Rekam</button>' : ''}
+      ${bridge ? '<button class="sec" id="openNative">Browser sistem</button>' : ''}</div>
+      <div class="note">Saat Preview &amp; Rekam: situs dibuka full-screen, resource yang termuat dicatat seperti sesi merekam. Ketuk <b>Selesai &amp; Copy</b> untuk menyelesaikan.</div>
       ${p.demo ? '<div class="note">Mode DEMO: data di bawah adalah simulasi untuk menguji tampilan, bukan hasil pemindaian sungguhan.</div>' : ''}</div>
       <div class="card"><h3>Live feed</h3><div class="log" id="logbox">${log.map(l => '<div>' + esc(l) + '</div>').join('') || '<div>Menunggu…</div>'}</div></div>`;
     },
@@ -361,8 +374,17 @@
   const on = (s, ev, fn) => { const e = $(s); if (e) e.addEventListener(ev, fn); };
   const onAll = (s, ev, fn) => document.querySelectorAll(s).forEach(e => e.addEventListener(ev, () => fn(e)));
   const BIND = {
-    home() { on('#go', 'click', () => startScan($('#url').value, $('#level').value, $('#auth').checked)); },
-    browser() { on('#stop', 'click', stopScan); on('#rescan', 'click', () => { const p = cur(); startScan(p.url, p.level, true); }); on('#openNative', 'click', () => bridge.openUrl(cur().url)); const b = $('#logbox'); if (b) b.scrollTop = b.scrollHeight; },
+    home() {
+      on('#goPreview', 'click', () => startScan($('#url').value, $('#level').value, $('#auth').checked, 'preview'));
+      on('#go', 'click', () => startScan($('#url').value, $('#level').value, $('#auth').checked, 'scan'));
+    },
+    browser() {
+      on('#stop', 'click', stopScan);
+      on('#rescan', 'click', () => { const p = cur(); startScan(p.url, p.level, true, 'scan'); });
+      on('#rePreview', 'click', () => { const p = cur(); if (p) startScan(p.url, p.level, true, 'preview'); });
+      on('#openNative', 'click', () => bridge && bridge.openUrl(cur().url));
+      const b = $('#logbox'); if (b) b.scrollTop = b.scrollHeight;
+    },
     analyze() { onAll('[data-cat]', 'click', b => { A._f = b.dataset.cat; render(); }); },
     editor() {
       const p = cur(); if (!p) return; const e = p.edits, d = e.draft;

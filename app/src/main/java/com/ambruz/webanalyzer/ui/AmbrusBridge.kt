@@ -18,7 +18,7 @@ import java.io.File
 
 /**
  * Bridge ke UI assets/ambrus — kontrak di app.js:
- * Android.startScan / stopScan / openUrl / saveZip
+ * Android.startScan / stopScan / openUrl / saveZip / startPreview
  * Native → Ambrus.emit({ type: 'resource'|'done'|... })
  */
 class AmbrusBridge(
@@ -27,6 +27,23 @@ class AmbrusBridge(
 ) {
     private val pipeline = ScanPipeline()
     @Volatile private var activeId: String? = null
+
+    @JavascriptInterface
+    fun startPreview(payloadJson: String) {
+        try {
+            val o = JSONObject(payloadJson)
+            val url = o.getString("url")
+            val projectId = o.optString("projectId")
+            activity.runOnUiThread {
+                val i = Intent(activity, PreviewRecordActivity::class.java)
+                    .putExtra(PreviewRecordActivity.EXTRA_URL, url)
+                    .putExtra(PreviewRecordActivity.EXTRA_PROJECT_ID, projectId)
+                activity.startActivity(i)
+            }
+        } catch (e: Exception) {
+            emit(JSONObject().put("type", "error").put("message", e.message ?: "Preview gagal"))
+        }
+    }
 
     @JavascriptInterface
     fun startScan(payloadJson: String) {
@@ -42,7 +59,7 @@ class AmbrusBridge(
                     else -> AccessLevel.A_PUBLIC
                 }
                 activeId = projectId
-                emit(JSONObject().put("type", "progress").put("value", 5).put("message", "Scan native dimulai…"))
+                emit(JSONObject().put("type", "progress").put("value", 5).put("message", "Scan cepat (tanpa preview)…"))
 
                 val project = withContext(Dispatchers.IO) { pipeline.run(url, level) }
                 if (activeId != projectId) return@launch
@@ -136,7 +153,6 @@ class AmbrusBridge(
     }
 
     private fun emit(payload: JSONObject) {
-        // Ambrus.emit menerima objek atau string JSON
         val arg = JSONObject.quote(payload.toString())
         val js = "window.Ambrus && window.Ambrus.emit && window.Ambrus.emit($arg)"
         activity.runOnUiThread { activity.evaluateJs(js) }

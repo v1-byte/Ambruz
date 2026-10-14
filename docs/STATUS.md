@@ -48,3 +48,11 @@ cd worker && npm i && npx wrangler deploy
 - Logo utama: `assets/ambrus/logo.png` + `@mipmap/ic_launcher`
 - Bridge native: `window.Android` (startScan, stopScan, openUrl, saveZip)
 - Tanpa bridge di browser biasa → mode DEMO
+
+## Splash + Preview & Rekam (2026-10-14)
+
+- SplashActivity: logo Ambrus penuh layar → MainActivity
+- PreviewRecordActivity: WebView full-screen, merekam resource saat navigasi
+- Alur: Preview & Rekam → Selesai & Copy → Analisis → Ekspor ZIP
+- Alternatif: Scan cepat tanpa membuka situs
+- SessionBus: event rekaman ke shell UI (Ambrus.emit)

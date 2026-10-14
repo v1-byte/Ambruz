@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#0b1020">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="8dp"
+        android:background="#141b33">
+        <ImageButton
+            android:id="@+id/btnBack"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Kembali"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:tint="#e8ecff" />
+        <EditText
+            android:id="@+id/previewUrl"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:background="#1b2444"
+            android:paddingHorizontal="10dp"
+            android:textColor="#e8ecff"
+            android:textColorHint="#8f9ac4"
+            android:textSize="13sp"
+            android:inputType="textUri"
+            android:imeOptions="actionGo"
+            android:singleLine="true"
+            android:hint="https://" />
+        <Button
+            android:id="@+id/btnGo"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:text="Go"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/recordBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="6dp"
+        android:background="#3d1520">
+        <View
+            android:id="@+id/recDot"
+            android:layout_width="10dp"
+            android:layout_height="10dp"
+            android:background="#ff6b81" />
+        <TextView
+            android:id="@+id/recStatus"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:text="Merekam sesi preview…"
+            android:textColor="#ffb4c0"
+            android:textSize="12sp" />
+        <TextView
+            android:id="@+id/recCount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="0 resource"
+            android:textColor="#e8ecff"
+            android:textSize="12sp"
+            android:layout_marginEnd="8dp" />
+        <Button
+            android:id="@+id/btnFinish"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="Selesai &amp; Copy"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+    <WebView
+        android:id="@+id/previewWeb"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+</LinearLayout>
