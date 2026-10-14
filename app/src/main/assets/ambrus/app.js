@@ -330,7 +330,7 @@
     },
     export() {
       const p = cur(); if (!p) return '<h2>ZIP Export</h2>' + need();
-      return `<h2>ZIP Export</h2><div class="card"><div class="note">Struktur: project.json, manifest.json, report/*, website/*, backend/, deployment/, checksums/SHA256SUMS.txt. Rahasia produksi tidak dimasukkan. Ekspor ditandai sukses hanya setelah ZIP diverifikasi.</div>
+      return `<h2>ZIP Export</h2><div class="card"><div class="note">Struktur kerangka: web/, games/, api/, worker/, database/, analyzer/, docs/, scripts/, checksums/. Rahasia produksi tidak dimasukkan. Ekspor ditandai sukses hanya setelah ZIP diverifikasi.</div>
       <label class="chk"><input type="checkbox" id="xContent" checked><span>Sertakan isi resource yang tersedia dari native</span></label>
       <div class="meta" style="margin:8px 0">Status ekspor: ${tag(p.exportStatus, p.exportStatus === 'sukses' ? 'ok' : '')}</div>
       <button class="full" id="xGo">Bangun &amp; Verifikasi ZIP</button><div id="xOut" style="margin-top:10px"></div></div>`;
@@ -480,34 +480,172 @@
   }
   async function sha256(u8) { if (!(window.crypto && crypto.subtle)) return null; const h = await crypto.subtle.digest('SHA-256', u8); return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join(''); }
 
+  function mapResourcePath(r) {
+    const cat = (r.category || '').toLowerCase();
+    const mime = (r.mime || '').toLowerCase();
+    const u = (r.url || '').toLowerCase();
+    const base = (r.path || 'file').replace(/^\/+/, '').replace(/\.\./g, '');
+    if (cat.includes('audio') || mime.startsWith('audio') || /\.(mp3|ogg|wav|m4a)(\?|$)/.test(u)) return 'web/assets/audio/' + base;
+    if (cat.includes('font') || mime.includes('font') || /\.(woff2?|ttf|otf)(\?|$)/.test(u)) return 'web/assets/fonts/' + base;
+    if (cat.includes('gambar') || cat.includes('image') || mime.startsWith('image') || /\.(png|jpe?g|gif|webp|svg|avif|ico)(\?|$)/.test(u)) {
+      if (u.includes('icon') || base.includes('icon') || /\.ico(\?|$)/.test(u)) return 'web/assets/icons/' + base;
+      return 'web/assets/images/' + base;
+    }
+    if (mime.includes('css') || /\.css(\?|$)/.test(u)) return 'web/assets/css/' + base;
+    if (mime.includes('javascript') || /\.m?js(\?|$)/.test(u)) return 'web/assets/js/' + base;
+    if (mime.includes('json') || /\.json(\?|$)/.test(u)) {
+      if (u.includes('manifest')) return 'web/manifest.json';
+      if (u.includes('game') || u.includes('catalog')) return 'games/' + base;
+      return 'web/assets/js/' + base;
+    }
+    if (mime.includes('html') || /\.html?(\?|$)/.test(u) || base === 'index.html' || base === 'index') return 'web/pages/home/' + (base === 'index' ? 'index.html' : base);
+    if (cat.includes('video') || mime.startsWith('video')) return 'web/assets/animations/' + base;
+    if (u.includes('/api/') || u.includes('graphql')) return 'api/mock-responses/' + base.replace(/[^\w.-]+/g, '_') + '.json';
+    return 'web/assets/js/' + base;
+  }
   async function doExport() {
-    const p = cur(), out = $('#xOut'), inc = $('#xContent').checked; out.textContent = 'Membangun…';
+    const p = cur(), out = $('#xOut');
+    const incEl = $('#xContent');
+    const inc = incEl ? incEl.checked : true;
+    if (out) out.textContent = 'Membangun kerangka proyek…';
     try {
-      const enc = new TextEncoder(), J = o => JSON.stringify(o, null, 2), files = [], add = (path, txt) => files.push({ path: safePath(path), data: typeof txt === 'string' ? enc.encode(txt) : txt });
-      const rs = p.resources.map(r => ({ url: mask(r.url), category: r.category, mime: r.mime, size: r.size, status: r.status, hash: r.hash, path: r.path, error: r.error, checkedAt: r.checkedAt }));
-      const lim = ['Backend privat, database, dan logika server tidak dapat diperoleh dari URL frontend.', 'Resource yang tidak berhasil diambil dicatat pada resources.json.', 'Klasifikasi endpoint/domain adalah perkiraan berdasarkan bukti yang teramati.', 'Endpoint yang tidak teramati tidak berarti tidak ada.', 'DOM hasil render bukan pengganti source code.', p.demo ? 'PERHATIAN: proyek ini berasal dari mode DEMO (data simulasi).' : 'Hasil terbatas pada akses yang tersedia (Level ' + p.level + ').'];
-      add('project.json', J({ id: p.id, url: mask(p.url), finalUrl: mask(p.finalUrl), level: p.level, createdAt: new Date(p.createdAt).toISOString(), demo: p.demo, edits: p.edits ? { siteName: p.edits.siteName, primary: p.edits.primary, accent: p.edits.accent, apiBase: p.edits.apiBase } : {}, migration: p.migration, deploy: p.deploy }));
-      add('README.md', `# ${p.edits.siteName || new URL(p.url).hostname}\n\nDiekspor oleh Ambrus ${TOOL_VERSION} pada ${new Date().toISOString()}.\n\nJenis hasil: resource copy (parsial). Frontend rebuild & full migration TIDAK otomatis tercapai.\nLihat report/limitations.json.\n`);
-      add('report/analysis.json', J({ stats: { resources: p.resources.length, domains: Object.keys(p.domains).length, endpoints: p.endpoints.length, requests: p.requests.length } }));
-      add('report/resources.json', J(rs)); add('report/domains.json', J(Object.values(p.domains))); add('report/servers.json', J({ observed: p.server, dns: p.dns, note: 'Hanya fakta teramati.' }));
-      add('report/endpoints.json', J(p.endpoints.map(e => ({ ...e, key: undefned(e.key) })))); add('report/dependencies.json', J({ pages: p.pages, redirects: p.redirects.map(r => ({ from: mask(r.from), to: mask(r.to) })), failed: rs.filter(r => r.status !== 'ok') }));
-      add('report/limitations.json', J(lim));
+      const enc = new TextEncoder(), J = o => JSON.stringify(o, null, 2);
+      const files = [], add = (path, txt) => files.push({ path: safePath(path), data: typeof txt === 'string' ? enc.encode(txt) : txt });
+      const host = (() => { try { return new URL(p.url).hostname; } catch (e) { return 'site'; } })();
+      const rs = p.resources.map(r => ({ url: mask(r.url), category: r.category, mime: r.mime, size: r.size, status: r.status, hash: r.hash, path: r.path, mapped: mapResourcePath(r), error: r.error, checkedAt: r.checkedAt }));
+      const lim = [
+        'Backend privat, database, dan logika server tidak dapat diperoleh dari URL frontend saja.',
+        'Resource yang tidak berhasil diambil dicatat di analyzer/reports/.',
+        'Klasifikasi endpoint/domain adalah perkiraan berdasarkan bukti teramati.',
+        'Struktur folder mengikuti kerangka web-copier-analyzer-android.',
+        p.demo ? 'PERHATIAN: data DEMO (simulasi).' : 'Hasil terbatas pada akses Level ' + p.level + '.'
+      ];
+      const stub = (title, body) => '# ' + title + '\n\n' + body + '\n\n_Generated by Ambrus ' + TOOL_VERSION + '_\n';
+
+      // —— Root ——
+      add('README.md', stub(host, 'Proyek hasil Ambrus Web Copier & Analyzer.\n\nSumber: ' + mask(p.url) + '\nDiekspor: ' + new Date().toISOString() + '\n\n## Struktur\n- `web/` frontend & assets\n- `games/` inventaris game (jika ada)\n- `api/` OpenAPI + mock\n- `worker/` Cloudflare Worker template\n- `database/` skema placeholder\n- `analyzer/` laporan analisis\n- `docs/` dokumentasi\n- `scripts/` utilitas\n\nLihat `docs/` dan `analyzer/reports/` untuk keterbatasan.'));
+      add('LICENSES.md', stub('Licenses', 'Cantumkan lisensi aset milik Anda. Jangan redistribusi aset pihak ketiga tanpa izin.\nSumber scan: ' + mask(p.url)));
+      add('.gitignore', 'node_modules/\n.wrangler/\n.env\n*.log\n.DS_Store\nandroid-app/**/build/\nstorage/private/\n');
+
+      // —— docs/ ——
+      add('docs/website-map.md', stub('Website Map', 'Halaman: ' + (p.pages || []).map(mask).join('\n- ') + '\n\nRedirects: ' + J(p.redirects || [])));
+      add('docs/technology-report.md', stub('Technology Report', 'Server teramati:\n```json\n' + J(p.server || {}) + '\n```\n\nDNS:\n```json\n' + J(p.dns || []) + '\n```'));
+      add('docs/asset-inventory.md', stub('Asset Inventory', 'Total resource: ' + p.resources.length + '\n\n```json\n' + J(rs.slice(0, 200)) + '\n```'));
+      add('docs/game-analysis.md', stub('Game Analysis', 'Endpoint game terklasifikasi:\n```json\n' + J((p.endpoints || []).filter(e => e.category === 'Game' || e.game)) + '\n```\n\nLogika server / RNG tidak dapat disimpulkan dari frontend.'));
+      add('docs/api-documentation.md', stub('API Documentation', 'Endpoint teramati:\n```json\n' + J(p.endpoints || []) + '\n```'));
+      add('docs/database-schema.md', stub('Database Schema', 'Skema DB tidak tersedia dari URL publik. Isi manual setelah akses Level B/C.\nLihat `database/schema.sql`.'));
+      add('docs/server-architecture.md', stub('Server Architecture', 'Hostname / domain:\n```json\n' + J(Object.values(p.domains || {})) + '\n```'));
+      add('docs/deployment-guide.md', stub('Deployment Guide', '1. Frontend: unggah `web/` ke Cloudflare Pages\n2. API: sesuaikan `worker/` + `wrangler.toml`\n3. Domain harus milik Anda\n4. Jangan commit secret'));
+
+      // —— web/ skeleton ——
+      add('web/index.html', (p.edits && p.edits.htmlDraft) ? p.edits.htmlDraft : '<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + esc(host) + '</title><link rel="stylesheet" href="assets/css/main.css"></head><body><h1>' + esc(host) + '</h1><p>Hasil rebuild parsial Ambrus. Lengkapi dari analyzer/reports.</p><script src="assets/js/main.js"><\/script></body></html>');
+      add('web/manifest.json', J({ name: host, short_name: host, start_url: '/', display: 'standalone' }));
+      add('web/robots.txt', 'User-agent: *\nAllow: /\n');
+      ['home', 'login', 'profile', 'lobby', 'game', 'wallet', 'settings'].forEach(function (pg) {
+        add('web/pages/' + pg + '/README.md', stub('Page: ' + pg, 'Placeholder halaman `' + pg + '`. Isi dari hasil scan jika tersedia.'));
+      });
+      ['header', 'navigation', 'sidebar', 'modal', 'footer'].forEach(function (c) {
+        add('web/components/' + c + '/README.md', stub('Component: ' + c, 'Placeholder komponen UI.'));
+      });
+      add('web/assets/css/main.css', '/* Ambrus export — ' + host + ' */\nbody{font-family:system-ui,sans-serif;margin:0;padding:16px;background:#0b1020;color:#e8ecff}\n');
+      add('web/assets/js/main.js', '// Ambrus export — entry frontend\nconsole.log("Ambrus rebuild stub for ' + host + '");\n');
+      add('web/assets/images/.gitkeep', '');
+      add('web/assets/icons/.gitkeep', '');
+      add('web/assets/fonts/.gitkeep', '');
+      add('web/assets/audio/.gitkeep', '');
+      add('web/assets/animations/.gitkeep', '');
+
+      // map captured content into web/
       const withContent = p.resources.filter(r => r.status === 'ok' && typeof r.content === 'string');
-      if (inc) withContent.forEach(r => add('website/' + (r.path || 'file'), r.content));
-      else add('website/README.md', 'Isi resource tidak disertakan.');
-      add('backend/README.md', 'Backend baru belum dikembangkan. Lihat migrasi API di project.json.'); add('backend/api-spec.json', J({ mode: p.migration.mode, newBase: p.migration.newBase, map: p.migration.map }));
-      const d = deployFiles(p); add('deployment/README.md', d['README.md']); add('deployment/deployment-config.example', d['wrangler.toml.example']);
-      const manifest = { projectId: p.id, url: mask(p.url), finalUrl: mask(p.finalUrl), analyzedAt: new Date(p.createdAt).toISOString(), toolVersion: TOOL_VERSION, files: [], resources: rs.length, limitations: lim };
-      let sums = ''; for (const f of files) { const h = await sha256(f.data); manifest.files.push({ path: f.path, size: f.data.length, sha256: h }); if (h) sums += h + '  ' + f.path + '\n'; }
-      add('manifest.json', J(manifest)); add('checksums/SHA256SUMS.txt', sums || '(SHA-256 tidak tersedia di konteks ini)\n');
+      if (inc) withContent.forEach(r => add(mapResourcePath(r), r.content));
+      if (p.edits && p.edits.htmlDraft) add('web/pages/home/index.html', p.edits.htmlDraft);
+      if (p.websiteFiles) Object.keys(p.websiteFiles).forEach(k => add('web/pages/home/' + k.replace(/^\/+/, ''), p.websiteFiles[k]));
+
+      // —— games/ ——
+      const gameEps = (p.endpoints || []).filter(e => e.category === 'Game' || e.game);
+      add('games/catalog.json', J({ source: mask(p.url), games: gameEps.map(e => ({ path: e.path, host: e.host, category: e.game || e.category })) }));
+      add('games/shared/README.md', stub('Shared game assets', 'Aset bersama antar game.'));
+      add('games/engine-adapters/README.md', stub('Engine adapters', 'Adapter engine game — isi manual.'));
+      add('games/game-001/README.md', stub('Game 001', gameEps.length ? 'Endpoint terkait:\n' + J(gameEps.slice(0, 20)) : 'Belum terdeteksi dari scan.'));
+      add('games/game-001/index.html', '<!doctype html><title>Game 001</title><p>Stub game dari Ambrus</p>');
+      add('games/game-001/config/README.md', stub('Config', 'Konfigurasi game.'));
+      add('games/game-002/README.md', stub('Game 002', 'Placeholder.'));
+
+      // —— api/ ——
+      const paths = {};
+      (p.endpoints || []).forEach(e => {
+        const path = e.path || '/';
+        paths[path] = paths[path] || { get: { summary: e.category || 'observed', responses: { '200': { description: 'observed' } } } };
+      });
+      add('api/openapi.yaml', 'openapi: 3.0.3\ninfo:\n  title: ' + host + ' API (observed)\n  version: "0.1.0"\npaths:\n' + Object.keys(paths).map(function (path) {
+        return '  ' + JSON.stringify(path) + ':\n    get:\n      summary: observed\n      responses:\n        "200":\n          description: ok\n';
+      }).join('') || '  /:\n    get:\n      summary: root\n      responses:\n        "200":\n          description: ok\n');
+      add('api/schemas/README.md', stub('Schemas', 'Isi skema request/response setelah dokumentasi resmi tersedia.'));
+      add('api/mock-responses/README.md', stub('Mock responses', 'Respons contoh untuk UI testing.'));
+      (p.endpoints || []).slice(0, 30).forEach(function (e, i) {
+        add('api/mock-responses/ep-' + i + '.json', J({ url: mask(e.url || (e.host || '') + (e.path || '')), method: e.method || 'GET', category: e.category, status: e.status, note: 'mock — bukan data produksi' }));
+      });
+
+      // —— worker/ ——
+      add('worker/wrangler.toml', 'name = "ambrus-' + host.replace(/[^a-z0-9-]/gi, '-').toLowerCase().slice(0, 40) + '"\nmain = "src/index.js"\ncompatibility_date = "2026-10-01"\n');
+      add('worker/src/index.js', 'export default {\n  async fetch(request, env) {\n    const url = new URL(request.url);\n    if (url.pathname === "/api/health") return Response.json({ ok: true });\n    return new Response("Ambrus worker stub", { status: 200 });\n  }\n};\n');
+      add('worker/src/routes/README.md', stub('Routes', 'Definisikan route API baru di sini.'));
+      add('worker/src/middleware/README.md', stub('Middleware', 'Auth, CORS, rate limit.'));
+      add('worker/src/services/README.md', stub('Services', 'Logika bisnis.'));
+      add('worker/src/adapters/README.md', stub('Adapters', 'Adapter API lama → baru.'));
+      add('worker/migrations/README.md', stub('Migrations', 'Migrasi D1 / SQL.'));
+
+      // —— database/ ——
+      add('database/schema.sql', '-- Placeholder schema — lengkapi setelah akses DB sah\n-- Source scan: ' + mask(p.url) + '\nCREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);\n');
+      add('database/seed.sql', '-- Seed data (kosong)\n');
+      add('database/ERD.md', stub('ERD', 'Buat diagram setelah skema final.'));
+
+      // —— storage / android / analyzer / tests / scripts ——
+      add('storage/README.md', stub('Storage', 'Object storage / R2 / S3 — konfigurasi milik Anda.'));
+      add('android-app/app/README.md', stub('Android app', 'Proyek analyzer Android (Ambrus). Sumber scan disimpan terpisah.'));
+      add('analyzer/page-inspector/README.md', stub('Page inspector', 'Halaman: ' + J(p.pages || [])));
+      add('analyzer/asset-inspector/resources.json', J(rs));
+      add('analyzer/api-inspector/endpoints.json', J(p.endpoints || []));
+      add('analyzer/dependency-map/map.json', J({ pages: p.pages, redirects: p.redirects, domains: Object.values(p.domains || {}) }));
+      add('analyzer/reports/analysis.json', J({ stats: { resources: p.resources.length, domains: Object.keys(p.domains || {}).length, endpoints: (p.endpoints || []).length, requests: (p.requests || []).length }, limitations: lim }));
+      add('analyzer/reports/limitations.json', J(lim));
+      add('analyzer/reports/domains.json', J(Object.values(p.domains || {})));
+      add('analyzer/reports/servers.json', J({ observed: p.server, dns: p.dns }));
+      ['frontend', 'games', 'api', 'security', 'integration'].forEach(function (tname) {
+        add('tests/' + tname + '/README.md', stub('Tests: ' + tname, 'Tambahkan uji otomatis di sini.'));
+      });
+      add('scripts/validate-project.sh', '#!/bin/sh\nset -e\necho "Validating structure..."\nfor d in web games api worker database analyzer docs scripts; do\n  [ -d "$d" ] || { echo "missing $d"; exit 1; }\ndone\necho "OK"\n');
+      add('scripts/build-zip.sh', '#!/bin/sh\n# Re-pack project folder (desktop)\nzip -r project-export.zip . -x "*.git*" -x "node_modules/*"\n');
+
+      // checksums
+      let sums = '';
+      const manifest = { framework: 'web-copier-analyzer-android', projectId: p.id, url: mask(p.url), finalUrl: mask(p.finalUrl), analyzedAt: new Date(p.createdAt).toISOString(), toolVersion: TOOL_VERSION, files: [], resources: rs.length, limitations: lim };
+      for (const f of files) {
+        const h = await sha256(f.data);
+        manifest.files.push({ path: f.path, size: f.data.length, sha256: h });
+        if (h) sums += h + '  ' + f.path + '\n';
+      }
+      add('analyzer/reports/manifest.json', J(manifest));
+      add('checksums/SHA256SUMS.txt', sums || '(SHA-256 n/a)\n');
+
       const zip = buildZip(files), err = verifyZip(zip, files.length);
-      if (err) { p.exportStatus = 'gagal'; save(); out.innerHTML = '<span class="tag err">Verifikasi gagal: ' + esc(err) + '</span>'; return; }
+      if (err) { p.exportStatus = 'gagal'; save(); if (out) out.innerHTML = '<span class="tag err">Verifikasi gagal: ' + esc(err) + '</span>'; return; }
       p.exportStatus = 'sukses'; save();
-      const name = 'ambrus-' + new URL(p.url).hostname + '-' + p.id + '.zip';
-      if (bridge && bridge.saveZip) { let b = ''; for (let i = 0; i < zip.length; i += 0x8000) b += String.fromCharCode.apply(null, zip.subarray(i, i + 0x8000)); bridge.saveZip(btoa(b), name); }
-      else { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([zip], { type: 'application/zip' })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
-      out.innerHTML = `<span class="tag ok">ZIP terverifikasi</span> ${files.length} file · ${fmtSize(zip.length)}${withContent.length === 0 ? '<div class="note">Tidak ada isi resource dari native — folder website/ kosong. Itu normal di mode DEMO.</div>' : ''}`;
-    } catch (e) { p.exportStatus = 'gagal'; save(); out.innerHTML = '<span class="tag err">Gagal: ' + esc(e.message) + '</span>'; }
+      const name = 'web-copier-analyzer-android-' + host + '-' + p.id + '.zip';
+      if (bridge && bridge.saveZip) {
+        let b = '';
+        for (let i = 0; i < zip.length; i += 0x8000) b += String.fromCharCode.apply(null, zip.subarray(i, i + 0x8000));
+        bridge.saveZip(btoa(b), name);
+      } else {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([zip], { type: 'application/zip' }));
+        a.download = name; document.body.appendChild(a); a.click(); a.remove();
+      }
+      if (out) out.innerHTML = '<span class="tag ok">ZIP kerangka lengkap</span> ' + files.length + ' file · ' + fmtSize(zip.length) + '<div class="note">Struktur: web/, games/, api/, worker/, database/, analyzer/, docs/, scripts/</div>';
+    } catch (e) {
+      p.exportStatus = 'gagal'; save();
+      if (out) out.innerHTML = '<span class="tag err">Gagal: ' + esc(e.message) + '</span>';
+    }
   }
   function undefned(k) { return undefined; }
 

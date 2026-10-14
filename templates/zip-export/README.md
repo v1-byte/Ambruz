@@ -1,31 +1,22 @@
-# Struktur ZIP ekspor Ambruz (target)
+# Struktur ZIP ekspor Ambrus (= kerangka web-copier-analyzer-android)
 
 ```
-web-project.zip
-  project.json
-  README.md
-  manifest.json
-  report/
-    analysis.json
-    resources.json
-    domains.json
-    servers.json
-    endpoints.json
-    dependencies.json
-    limitations.json
-  website/
-    index.html
-    assets/
-    pages/
-    config/
-  backend/
-    README.md
-    api-spec.json
-  deployment/
-    README.md
-    deployment-config.example
-  checksums/
-    SHA256SUMS.txt
+web-copier-analyzer-android/
+├── README.md
+├── LICENSES.md
+├── .gitignore
+├── docs/          (website-map, technology-report, asset-inventory, ...)
+├── web/           (index, pages/, components/, assets/{css,js,images,...})
+├── games/         (catalog.json, game-001/, shared/, engine-adapters/)
+├── api/           (openapi.yaml, schemas/, mock-responses/)
+├── worker/        (src/, migrations/, wrangler.toml)
+├── database/      (schema.sql, seed.sql, ERD.md)
+├── storage/
+├── android-app/
+├── analyzer/      (page/asset/api inspectors, reports/)
+├── tests/
+├── scripts/       (validate-project.sh, build-zip.sh)
+└── checksums/SHA256SUMS.txt
 ```
 
-File hanya dimasukkan jika tersedia. Secret produksi dilarang.
+Resource hasil scan dipetakan ke `web/assets/...` atau `api/mock-responses/`.
