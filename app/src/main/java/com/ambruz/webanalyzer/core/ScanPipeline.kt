@@ -49,7 +49,7 @@ class ScanPipeline(
                 sourceUrl = rawUrl,
                 finalUrl = page.finalUrl,
                 accessLevel = access,
-                status = ProjectStatus.FAILED,
+                status = ProjectStatus.ERROR,
                 limitations = limitations + listOf("Scan gagal: ${page.error}")
             )
         }
