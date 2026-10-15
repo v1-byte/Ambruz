@@ -43,7 +43,7 @@ class UrlScanner(
                 val limited = if (bytes != null && bytes.size > limits.maxBodyBytes) {
                     bytes.copyOf(limits.maxBodyBytes.toInt())
                 } else bytes
-                val snippet = limited?.toString(Charsets.UTF_8)?.take(8_000)
+                val snippet = limited?.toString(Charsets.UTF_8) // full body up to maxBodyBytes for parsing + export
                 val headerMap = response.headers.toMultimap().mapValues { it.value.joinToString(", ") }
                 ScanPageResult(
                     inputUrl = rawUrl,

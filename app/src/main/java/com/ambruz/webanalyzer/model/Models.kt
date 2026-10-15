@@ -56,7 +56,11 @@ data class ResourceRecord(
     val localPath: String? = null,
     val sha256: String? = null,
     val error: String? = null,
-    val discoveredFrom: String? = null
+    val discoveredFrom: String? = null,
+    /** Teks (HTML/CSS/JS/JSON/SVG) untuk dimasukkan ke ZIP. */
+    val textContent: String? = null,
+    /** Base64 untuk binary kecil (gambar/font) agar bisa masuk ZIP dari JS. */
+    val base64Content: String? = null
 )
 
 data class DomainRecord(

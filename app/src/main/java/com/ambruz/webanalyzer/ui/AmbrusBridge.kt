@@ -80,10 +80,27 @@ class AmbrusBridge(
                 emit(JSONObject().put("type", "server").put("host", host).put("status", 200).put("headers", JSONObject().put("content-type", "text/html")))
                 project.resources.take(300).forEachIndexed { i, r ->
                     if (activeId != projectId) return@launch
-                    emit(JSONObject().put("type", "resource").put("url", r.url).put("mime", r.contentType ?: "").put("size", r.sizeBytes ?: JSONObject.NULL).put("status", if (r.error == null) "ok" else "error").put("error", r.error ?: "").put("page", project.finalUrl ?: url).put("path", r.url.substringAfterLast("/").ifBlank { "file" }))
-                    if (i % 3 == 0) {
+                    val jo = JSONObject()
+                        .put("type", "resource")
+                        .put("url", r.url)
+                        .put("mime", r.contentType ?: "")
+                        .put("size", r.sizeBytes ?: JSONObject.NULL)
+                        .put("status", if (r.fetched && r.error == null) "ok" else if (r.error != null) "error" else "ok")
+                        .put("error", r.error ?: "")
+                        .put("page", project.finalUrl ?: url)
+                        .put("path", r.url.substringAfterLast("/").ifBlank { "index.html" }.substringBefore("?"))
+                    // isi file agar ZIP tidak 4KB
+                    val text = r.textContent
+                    if (!text.isNullOrEmpty()) {
+                        jo.put("content", text)
+                    } else if (!r.base64Content.isNullOrEmpty()) {
+                        jo.put("contentBase64", r.base64Content)
+                    }
+                    emit(jo)
+                    if (i % 2 == 0) {
                         val pct = ((i + 1) * 80 / project.resources.size.coerceAtLeast(1)).coerceIn(5, 90)
-                        emit(JSONObject().put("type", "progress").put("value", pct).put("message", "Loading resource ${i + 1}..."))
+                        emit(JSONObject().put("type", "progress").put("value", pct)
+                            .put("message", "Mengunduh ${i + 1}/${project.resources.size}…"))
                     }
                 }
                 project.endpoints.forEach { e ->

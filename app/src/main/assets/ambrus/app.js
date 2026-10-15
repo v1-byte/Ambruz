@@ -121,7 +121,7 @@
       case 'resource': {
         if (p.resources.length >= S.settings.maxResources) { if (!p._capped) { p._capped = true; pushLog('⚠ batas jumlah resource tercapai'); } break; }
         const key = ev.url; if (p.resources.some(r => r.url === key)) break;
-        const r = { url: ev.url, mime: ev.mime || '', size: ev.size ?? null, status: ev.status || 'ok', page: ev.page || p.url, hash: ev.hash || null, path: safePath(ev.path || guessPath(ev.url)), error: ev.error || null, content: ev.content, checkedAt: stamp };
+        const r = { url: ev.url, mime: ev.mime || '', size: ev.size ?? null, status: ev.status || 'ok', page: ev.page || p.url, hash: ev.hash || null, path: safePath(ev.path || guessPath(ev.url)), error: ev.error || null, content: ev.content || null, contentBase64: ev.contentBase64 || null, checkedAt: stamp };
         r.category = classifyResource(r);
         if (r.hash && p.resources.some(x => x.hash === r.hash)) r.dup = true;
         p.resources.push(r);
@@ -557,7 +557,15 @@
 
       // map captured content into web/
       const withContent = p.resources.filter(r => r.status === 'ok' && typeof r.content === 'string');
-      if (inc) withContent.forEach(r => add(mapResourcePath(r), r.content));
+      if (inc) {
+        withContent.forEach(r => add(mapResourcePath(r), r.content));
+        p.resources.filter(r => r.status === 'ok' && r.contentBase64).forEach(r => {
+          try {
+            const bin = Uint8Array.from(atob(r.contentBase64), c => c.charCodeAt(0));
+            add(mapResourcePath(r), bin);
+          } catch (e) {}
+        });
+      }
       if (p.edits && p.edits.htmlDraft) add('web/pages/home/index.html', p.edits.htmlDraft);
       if (p.websiteFiles) Object.keys(p.websiteFiles).forEach(k => add('web/pages/home/' + k.replace(/^\/+/, ''), p.websiteFiles[k]));
 
